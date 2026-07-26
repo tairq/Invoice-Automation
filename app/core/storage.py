@@ -28,6 +28,13 @@ class BaseStorage:
         """Check if a file exists."""
         raise NotImplementedError
 
+    def get_url(self, file_path: str, expires_in: int = 3600) -> Optional[str]:
+        """Return a URL for the file, or None if not available.
+
+        For S3, returns a presigned URL. For local storage, returns a file:// URI.
+        """
+        raise NotImplementedError
+
 
 class LocalStorage(BaseStorage):
     """Local filesystem storage."""
@@ -58,6 +65,13 @@ class LocalStorage(BaseStorage):
 
     def exists(self, file_path: str) -> bool:
         return self._resolve(file_path).exists()
+
+    def get_url(self, file_path: str, expires_in: int = 3600) -> Optional[str]:
+        """Return a local file URI or None."""
+        path = self._resolve(file_path)
+        if path.exists():
+            return path.as_uri()
+        return None
 
 
 class S3Storage(BaseStorage):
@@ -94,6 +108,20 @@ class S3Storage(BaseStorage):
             return True
         except Exception:
             return False
+
+    def get_url(self, file_path: str, expires_in: int = 3600) -> Optional[str]:
+        """Return a presigned S3 URL with the specified expiry."""
+        if not self.exists(file_path):
+            return None
+        try:
+            url = self.client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": file_path},
+                ExpiresIn=expires_in,
+            )
+            return url
+        except Exception:
+            return None
 
 
 def get_storage() -> BaseStorage:

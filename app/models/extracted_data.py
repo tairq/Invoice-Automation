@@ -6,7 +6,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, Uuid, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Numeric, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -46,6 +46,12 @@ class ExtractedData(Base):
     vendor_bank_account: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     vendor_bank_iban: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     vendor_bank_swift: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # Vendor verification
+    vendor_verified: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    vendor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid, ForeignKey("vendors.id"), nullable=True, index=True
+    )
 
     # Customer
     customer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

@@ -148,6 +148,18 @@ class ReviewResponse(BaseModel):
 
 # ─── Stats ────────────────────────────────────────────────────────
 
+class MonthlySpend(BaseModel):
+    month: str  # "2025-01"
+    total: float
+    count: int
+
+
+class TopVendor(BaseModel):
+    name: str
+    total: float
+    count: int
+
+
 class DashboardStats(BaseModel):
     total_invoices: int
     processed_today: int
@@ -157,6 +169,40 @@ class DashboardStats(BaseModel):
     total_amount_processed: Decimal
     invoices_by_status: dict[str, int]
     invoices_by_vendor: list[dict[str, Any]]
+    # Enhanced analytics
+    total_amount_by_currency: dict[str, float] = {}
+    avg_processing_time_seconds: float = 0.0
+    top_vendors: list[TopVendor] = []
+    monthly_spend: list[MonthlySpend] = []
+    anomaly_rate: Optional[float] = None
+
+
+# ─── Webhook Delivery ─────────────────────────────────────────────
+
+class WebhookDeliveryResponse(BaseModel):
+    id: uuid.UUID
+    organization_id: Optional[uuid.UUID] = None
+    invoice_id: uuid.UUID
+    webhook_url: str
+    event_type: str
+    attempt_number: int
+    status: str
+    response_code: Optional[int] = None
+    response_body: Optional[str] = None
+    error_message: Optional[str] = None
+    attempted_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─── n8n ──────────────────────────────────────────────────────────
+
+class N8nTriggerResponse(BaseModel):
+    success: bool
+    status_code: int
+    response: Optional[str] = None
 
 
 # ─── Export ───────────────────────────────────────────────────────

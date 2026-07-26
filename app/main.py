@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import close_db, init_db
+from app.core.redis import close_redis
 
 # Configure logging
 logging.basicConfig(
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     await close_db()
+    await close_redis()
     logger.info("Invoice Processor API shut down")
 
 
@@ -72,11 +74,18 @@ async def ingestion_error_handler(request: Request, exc: IngestionError) -> JSON
 
 # ─── Routes ──────────────────────────────────────────────────────
 
-from app.routers import exports, invoices, webhooks
+from app.routers import admin as admin_router
+from app.routers import approvals, exports, integrations, invoices, n8n, webhooks
 
+app.include_router(admin_router.router)
 app.include_router(invoices.router)
 app.include_router(exports.router)
 app.include_router(webhooks.router)
+app.include_router(integrations.router)
+app.include_router(approvals.approvals_router)
+app.include_router(approvals.purchase_orders_router)
+app.include_router(approvals.vendors_router)
+app.include_router(n8n.router)
 
 
 # ─── Health Check ────────────────────────────────────────────────

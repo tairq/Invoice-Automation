@@ -1,15 +1,24 @@
 """Webhook configuration API routes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.core.auth import get_api_key
 from app.database import get_session
 from app.models.organization import Organization
-from app.schemas import WebhookConfigRequest
+from app.models.webhook_delivery import WebhookDelivery
+from app.schemas import WebhookConfigRequest, WebhookDeliveryResponse
 
-router = APIRouter(prefix="/api/v1/settings", tags=["Settings"])
+router = APIRouter(
+    prefix="/api/v1/settings",
+    tags=["Settings"],
+    dependencies=[Depends(get_api_key)],
+)
 
 
 @router.post("/webhook")
@@ -69,3 +78,30 @@ async def get_webhook_config(
         "url": org.webhook_url,
         "events": events,
     }
+
+
+@router.get("/webhook/deliveries", response_model=list[WebhookDeliveryResponse])
+async def get_webhook_deliveries(
+    invoice_id: uuid.UUID | None = Query(None),
+    status: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
+) -> list[WebhookDeliveryResponse]:
+    """Get webhook delivery history with optional filtering."""
+    query = select(WebhookDelivery).order_by(
+        WebhookDelivery.created_at.desc()
+    )
+
+    if invoice_id:
+        query = query.where(WebhookDelivery.invoice_id == invoice_id)
+    if status:
+        query = query.where(WebhookDelivery.status == status)
+
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    result = await db.execute(query)
+    deliveries = result.scalars().all()
+
+    return [
+        WebhookDeliveryResponse.model_validate(d) for d in deliveries
+    ]

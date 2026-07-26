@@ -26,6 +26,16 @@ os.environ["DEBUG"] = "false"
 from app.database import Base, get_session  # noqa: auto-import
 from app.main import app  # noqa: auto-import
 
+# Bypass API key auth for all tests by default
+from app.core.auth import get_api_key  # noqa: auto-import
+
+
+async def _bypass_auth() -> None:
+    pass
+
+
+app.dependency_overrides[get_api_key] = _bypass_auth
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -78,7 +88,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         app.dependency_overrides[get_session] = _override_session
         yield session
 
-    app.dependency_overrides.clear()
+    app.dependency_overrides.pop(get_session, None)
     await engine.dispose()
 
 

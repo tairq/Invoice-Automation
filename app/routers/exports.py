@@ -9,10 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.auth import get_api_key
 from app.database import get_session
 from app.services.exporter import export_invoices_csv, export_invoices_json
 
-router = APIRouter(prefix="/api/v1/exports", tags=["Exports"])
+router = APIRouter(
+    prefix="/api/v1/exports",
+    tags=["Exports"],
+    dependencies=[Depends(get_api_key)],
+)
 
 
 @router.get("/csv")

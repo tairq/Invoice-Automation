@@ -6,10 +6,11 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.auth import get_api_key
 from app.database import get_session
 from app.models.extracted_data import ExtractedData
 from app.models.extraction_confidence import ExtractionConfidence
@@ -30,7 +31,11 @@ from app.schemas import (
 from app.services.ingestion import create_invoice_record
 from app.workers.invoice_worker import process_invoice_task
 
-router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
+router = APIRouter(
+    prefix="/api/v1/invoices",
+    tags=["Invoices"],
+    dependencies=[Depends(get_api_key)],
+)
 
 
 @router.post("/upload", response_model=UploadResponse, status_code=201)
@@ -92,6 +97,9 @@ async def list_invoices(
     vendor_name: Optional[str] = Query(None),
     needs_review: Optional[bool] = Query(None),
     is_duplicate: Optional[bool] = Query(None),
+    approval_status: Optional[str] = Query(None),
+    payment_status: Optional[str] = Query(None),
+    po_match_status: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     sort_by: str = Query("created_at"),
@@ -118,6 +126,12 @@ async def list_invoices(
         query = query.where(Invoice.needs_review == needs_review)
     if is_duplicate is not None:
         query = query.where(Invoice.is_duplicate == is_duplicate)
+    if approval_status:
+        query = query.where(Invoice.approval_status == approval_status)
+    if payment_status:
+        query = query.where(Invoice.payment_status == payment_status)
+    if po_match_status:
+        query = query.where(Invoice.po_match_status == po_match_status)
     if date_from:
         query = query.where(Invoice.created_at >= datetime.fromisoformat(date_from))
     if date_to:
@@ -171,7 +185,14 @@ async def list_invoices(
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_session),
 ) -> DashboardStats:
-    """Get aggregate invoice statistics."""
+    """Get aggregate invoice statistics.
+
+    Returns both summary counts and enhanced analytics (spend trends,
+    top vendors, monthly breakdown).
+    """
+    from datetime import date, timedelta
+    import math
+
     # Total counts by status
     status_q = (
         select(Invoice.status, func.count().label("count"))
@@ -197,22 +218,127 @@ async def get_dashboard_stats(
     avg_conf = (await db.execute(conf_q)).scalar() or 0.0
 
     # Total amount
+    from sqlalchemy import outerjoin
     amt_q = select(func.sum(ExtractedData.grand_total))
     total_amt = (await db.execute(amt_q)).scalar() or 0
 
-    # Top vendors
-    vendor_q = (
+    # Top vendors (by count, legacy)
+    vendor_count_q = (
         select(ExtractedData.vendor_name, func.count().label("count"))
         .group_by(ExtractedData.vendor_name)
         .order_by(func.count().desc())
         .limit(10)
     )
-    vendor_result = await db.execute(vendor_q)
-    top_vendors = [
+    vendor_result = await db.execute(vendor_count_q)
+    top_vendors_by_count = [
         {"name": row.vendor_name, "count": row.count}
         for row in vendor_result
         if row.vendor_name
     ]
+
+    # ── Enhanced Analytics ──────────────────────────────────────
+
+    # 1. Total amount by currency
+    currency_q = (
+        select(
+            ExtractedData.currency,
+            func.sum(ExtractedData.grand_total).label("total"),
+        )
+        .where(ExtractedData.currency.isnot(None))
+        .group_by(ExtractedData.currency)
+    )
+    currency_result = await db.execute(currency_q)
+    total_amount_by_currency = {
+        row.currency: float(row.total)
+        for row in currency_result
+        if row.currency and row.total
+    }
+
+    # 2. Average processing time (seconds)
+    time_q = select(
+        func.avg(
+            func.extract("epoch", Invoice.processed_at - Invoice.created_at)
+        )
+    ).where(
+        Invoice.processed_at.isnot(None),
+        Invoice.status.in_(["done", "needs_review"]),
+    )
+    time_result = await db.execute(time_q)
+    avg_processing_seconds = float(time_result.scalar() or 0.0)
+
+    # 3. Top vendors by total amount (last 90 days)
+    ninety_days_ago = date.today() - timedelta(days=90)
+    vendor_amt_q = (
+        select(
+            ExtractedData.vendor_name,
+            func.sum(ExtractedData.grand_total).label("total"),
+            func.count().label("count"),
+        )
+        .join(Invoice, Invoice.id == ExtractedData.invoice_id)
+        .where(
+            ExtractedData.vendor_name.isnot(None),
+            Invoice.created_at >= ninety_days_ago,
+        )
+        .group_by(ExtractedData.vendor_name)
+        .order_by(func.sum(ExtractedData.grand_total).desc())
+        .limit(10)
+    )
+    vendor_amt_result = await db.execute(vendor_amt_q)
+    top_vendors = [
+        {
+            "name": row.vendor_name,
+            "total": float(row.total) if row.total else 0.0,
+            "count": row.count,
+        }
+        for row in vendor_amt_result
+        if row.vendor_name
+    ]
+
+    # 4. Monthly spend (last 12 months)
+    twelve_months_ago = date.today() - timedelta(days=365)
+    monthly_q = (
+        select(
+            func.date_trunc("month", Invoice.created_at).label("month"),
+            func.sum(ExtractedData.grand_total).label("total"),
+            func.count().label("count"),
+        )
+        .outerjoin(
+            ExtractedData, Invoice.id == ExtractedData.invoice_id
+        )
+        .where(Invoice.created_at >= twelve_months_ago)
+        .group_by(func.date_trunc("month", Invoice.created_at))
+        .order_by(func.date_trunc("month", Invoice.created_at))
+    )
+    monthly_result = await db.execute(monthly_q)
+    monthly_spend = [
+        {
+            "month": row.month.strftime("%Y-%m") if row.month else "unknown",
+            "total": float(row.total) if row.total else 0.0,
+            "count": row.count,
+        }
+        for row in monthly_result
+        if row.month
+    ]
+
+    # 5. Anomaly rate (optional - only if anomaly_score column exists)
+    anomaly_rate = None
+    try:
+        anomaly_q = select(
+            func.count().label("total"),
+            func.sum(
+                func.cast(Invoice.needs_review, Integer)
+            ).label("flagged"),
+        )
+        anomaly_result = await db.execute(anomaly_q)
+        anomaly_row = anomaly_result.one()
+        if anomaly_row.total and anomaly_row.total > 0:
+            anomaly_rate = round(
+                float(anomaly_row.flagged or 0) / float(anomaly_row.total) * 100,
+                2,
+            )
+    except Exception:
+        # Column or feature not available — omit
+        pass
 
     return DashboardStats(
         total_invoices=total,
@@ -222,7 +348,12 @@ async def get_dashboard_stats(
         average_confidence=float(avg_conf),
         total_amount_processed=total_amt,
         invoices_by_status=status_counts,
-        invoices_by_vendor=top_vendors,
+        invoices_by_vendor=top_vendors_by_count,
+        total_amount_by_currency=total_amount_by_currency,
+        avg_processing_time_seconds=avg_processing_seconds,
+        top_vendors=top_vendors,
+        monthly_spend=monthly_spend,
+        anomaly_rate=anomaly_rate,
     )
 
 

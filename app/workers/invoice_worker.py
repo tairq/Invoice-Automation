@@ -43,6 +43,11 @@ celery_app.conf.update(
             "schedule": 3600.0,  # Every hour
             "options": {"queue": "maintenance"},
         },
+        "check-payment-due-dates": {
+            "task": "check_payment_due_dates",
+            "schedule": 86400.0,  # Every 24 hours
+            "options": {"queue": "maintenance"},
+        },
     },
 )
 
@@ -136,31 +141,134 @@ async def _run_pipeline(invoice_id: str) -> dict:
             await _log_step(session, invoice_id, "save", "failed", str(exc))
             raise
 
-        # ── Step 6: Webhook notification ──
+        # ── Step 6: Vendor Matching ──
         try:
-            if validation["needs_review"]:
-                webhook_event = "invoice.needs_review"
-            else:
-                webhook_event = "invoice.processed"
+            from app.services.vendor_matching import match_vendor
 
-            _fire_webhook(invoice_id, webhook_event, extraction, validation)
+            vendor_result = await match_vendor(invoice_id, session)
+            result["vendor_match"] = vendor_result
         except Exception as exc:
-            logger.warning("Webhook failed (non-fatal): %s", exc)
+            logger.warning("Vendor matching failed (non-fatal): %s", exc)
+            await _log_step(session, invoice_id, "vendor_matching", "failed", str(exc))
 
-        # ── Step 7: Airtable sync ──
+        # ── Step 7: PO / 3-Way Matching ──
+        try:
+            from app.services.po_matching import match_purchase_order
+
+            po_result = await match_purchase_order(invoice_id, session)
+            result["po_match"] = po_result
+        except Exception as exc:
+            logger.warning("PO matching failed (non-fatal): %s", exc)
+            await _log_step(session, invoice_id, "po_matching", "failed", str(exc))
+
+        # ── Step 8: Payment Terms Parsing ──
+        try:
+            from datetime import date
+            from app.services.payment_terms import parse_payment_terms
+
+            ed = invoice.extracted_data
+            if ed and ed.payment_terms:
+                parsed = parse_payment_terms(ed.payment_terms, ed.issue_date or date.today())
+                if parsed.get("due_date"):
+                    invoice.due_date = date.fromisoformat(parsed["due_date"])
+                invoice.payment_status = "unpaid"
+                await _log_step(
+                    session, invoice_id, "payment_terms", "success",
+                    f"Parsed: due_date={parsed.get('due_date')}",
+                )
+        except Exception as exc:
+            logger.warning("Payment terms parsing failed (non-fatal): %s", exc)
+            await _log_step(session, invoice_id, "payment_terms", "failed", str(exc))
+
+        # ── Step 9: Approval Workflow ──
+        try:
+            from app.models.invoice import ApprovalStatus
+            from app.services.approval import create_approval_token, send_approval_email
+
+            threshold = settings.approval_threshold
+            grand_total = None
+            if invoice.extracted_data and invoice.extracted_data.grand_total is not None:
+                grand_total = float(invoice.extracted_data.grand_total)
+
+            # If threshold is 0, ALL invoices need approval
+            # If threshold > 0, only invoices above that amount need approval
+            needs_approval = threshold == 0 or (grand_total is not None and grand_total > threshold)
+
+            if needs_approval:
+                token = await create_approval_token(
+                    session,
+                    invoice.id,
+                    settings.approval_recipient_email,
+                )
+                vendor_name = invoice.extracted_data.vendor_name if invoice.extracted_data else None
+                send_approval_email(
+                    token,
+                    invoice.id,
+                    grand_total,
+                    vendor_name,
+                    settings.approval_recipient_email,
+                )
+                invoice.approval_status = ApprovalStatus.pending_approval
+                result["approval"] = {"status": "pending", "token": token[:8] + "..."}
+            else:
+                invoice.approval_status = ApprovalStatus.auto_approved
+                result["approval"] = {"status": "auto_approved"}
+        except Exception as exc:
+            logger.warning("Approval workflow failed (non-fatal): %s", exc)
+            await _log_step(session, invoice_id, "approval", "failed", str(exc))
+
+        # ── Step 10: Webhook notification (async Celery task with retry) ──
+        try:
+            deliver_webhook_task.delay(invoice_id)
+        except Exception as exc:
+            logger.warning("Webhook enqueue failed (non-fatal): %s", exc)
+
+        # ── Step 11: Airtable sync ──
         try:
             _sync_invoice_to_airtable(invoice_id, extraction)
         except Exception as exc:
             logger.warning("Airtable sync failed (non-fatal): %s", exc)
 
+        # ── Step 12: n8n integration ──
+        if settings.n8n_enabled and settings.n8n_webhook_url:
+            try:
+                _trigger_n8n(invoice_id)
+            except Exception as exc:
+                logger.warning("n8n trigger failed (non-fatal): %s", exc)
+
+        # ── Step 13: Xero sync (only for fully processed invoices) ──
+        if invoice.status == InvoiceStatus.done:
+            try:
+                from app.services.xero_sync import push_invoice_to_xero
+
+                xero_id = await push_invoice_to_xero(session, invoice)
+                if xero_id:
+                    invoice.xero_invoice_id = xero_id
+                    await _log_step(
+                        session, invoice_id, "xero_sync", "success",
+                        f"Pushed to Xero, InvoiceID={xero_id}",
+                    )
+                else:
+                    await _log_step(
+                        session, invoice_id, "xero_sync", "skipped",
+                        "Xero push skipped (disabled, no credentials, or already synced)",
+                    )
+            except Exception as exc:
+                logger.warning("Xero sync failed (non-fatal): %s", exc)
+                await _log_step(
+                    session, invoice_id, "xero_sync", "failed", str(exc),
+                )
+
         # ── Done ──
-        invoice.status = (
-            InvoiceStatus.needs_review
-            if validation["needs_review"]
-            else InvoiceStatus.done
-        )
+        # Don't override status if PO matching already set it to needs_review
+        if invoice.status != InvoiceStatus.needs_review:
+            invoice.status = (
+                InvoiceStatus.needs_review
+                if validation["needs_review"]
+                else InvoiceStatus.done
+            )
         invoice.confidence_score = validation["overall_confidence"]
-        invoice.needs_review = validation["needs_review"]
+        invoice.needs_review = validation["needs_review"] or invoice.needs_review
         invoice.processed_at = datetime.utcnow()
 
         result["confidence"] = validation["overall_confidence"]
@@ -357,16 +465,193 @@ def _sync_invoice_to_airtable(invoice_id: str, extraction: dict) -> None:
     asyncio.run(_build_and_sync())
 
 
-def _fire_webhook(invoice_id: str, event: str, extraction: dict, validation: dict):
-    """Fire webhook notification (fire-and-forget)."""
-    try:
-        import httpx
+# ─── n8n Integration ─────────────────────────────────────────────
 
-        # Get webhook config from DB (simplified — use default org)
+def _trigger_n8n(invoice_id: str) -> None:
+    """Fire n8n webhook with full invoice payload (fire-and-forget).
+
+    Only called when N8N_ENABLED=true and N8N_WEBHOOK_URL is set.
+    """
+    import httpx
+    from app.database import async_session_factory
+    from app.models.extracted_data import ExtractedData
+    from app.models.invoice import Invoice
+    from app.models.line_item import LineItem
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    async def _do_trigger():
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(Invoice)
+                .options(
+                    selectinload(Invoice.extracted_data),
+                    selectinload(Invoice.line_items),
+                )
+                .where(Invoice.id == uuid.UUID(invoice_id))
+            )
+            invoice = result.scalar_one_or_none()
+            if not invoice:
+                logger.warning("n8n trigger: invoice %s not found", invoice_id)
+                return
+
+            ed = invoice.extracted_data
+            items = invoice.line_items or []
+
+            payload = {
+                "id": str(invoice.id),
+                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
+                "vendor_name": ed.vendor_name if ed else None,
+                "total_amount": float(ed.grand_total) if ed and ed.grand_total else None,
+                "currency": ed.currency if ed else None,
+                "due_date": ed.due_date.isoformat() if ed and ed.due_date else None,
+                "airtable_record_id": getattr(invoice, "airtable_record_id", None),
+                "invoice_number": ed.invoice_number if ed else None,
+                "line_items": [
+                    {
+                        "description": item.description,
+                        "quantity": float(item.quantity) if item.quantity else None,
+                        "unit_price": float(item.unit_price) if item.unit_price else None,
+                        "net_amount": float(item.net_amount) if item.net_amount else None,
+                        "gross_amount": float(item.gross_amount) if item.gross_amount else None,
+                    }
+                    for item in items
+                ],
+            }
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    settings.n8n_webhook_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                )
+                resp.raise_for_status()
+
+            logger.info(
+                "n8n trigger: invoice %s -> %s (status=%s)",
+                invoice_id, settings.n8n_webhook_url, resp.status_code,
+            )
+
+    asyncio.run(_do_trigger())
+
+
+# ─── Webhook Delivery (Celery Task) ──────────────────────────────
+
+async def _record_webhook_delivery(
+    invoice_id: str,
+    webhook_url: str,
+    event_type: str,
+    attempt_number: int,
+    status: str,
+    response_code: int | None = None,
+    response_body: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Record a webhook delivery attempt in the database."""
+    from app.database import async_session_factory
+    from app.models.webhook_delivery import WebhookDelivery
+
+    async with async_session_factory() as session:
+        delivery = WebhookDelivery(
+            invoice_id=uuid.UUID(invoice_id),
+            organization_id=None,
+            webhook_url=webhook_url,
+            event_type=event_type,
+            attempt_number=attempt_number,
+            status=status,
+            response_code=response_code,
+            response_body=response_body,
+            error_message=error_message,
+            attempted_at=datetime.utcnow(),
+            delivered_at=datetime.utcnow() if status == "delivered" else None,
+        )
+        session.add(delivery)
+        await session.commit()
+
+
+async def _send_admin_dead_letter_alert(invoice_id: str, webhook_url: str, error: str) -> None:
+    """Send an email alert to the admin about a dead-lettered webhook."""
+    recipient = settings.admin_email
+    if not recipient:
+        logger.warning(
+            "Dead-letter alert not sent: ADMIN_EMAIL not configured "
+            "(invoice=%s webhook=%s)",
+            invoice_id, webhook_url,
+        )
+        return
+
+    subject = f"[Invoice Processor] Webhook Dead Letter - Invoice {invoice_id[:8]}"
+    body = (
+        f"Webhook delivery has permanently failed after max retries.\n\n"
+        f"Invoice ID: {invoice_id}\n"
+        f"Webhook URL: {webhook_url}\n"
+        f"Last error: {error}\n\n"
+        f"The webhook has been moved to dead-letter status."
+    )
+
+    try:
+        import smtplib
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = settings.approval_from_email
+        msg["To"] = recipient
+        msg.set_content(body)
+
+        if settings.smtp_host:
+            with smtplib.SMTP(
+                settings.smtp_host, settings.smtp_port, timeout=10.0
+            ) as smtp:
+                if settings.smtp_tls:
+                    smtp.starttls()
+                if settings.smtp_user:
+                    smtp.login(settings.smtp_user, settings.smtp_pass or "")
+                smtp.send_message(msg)
+            logger.info(
+                "Dead-letter alert sent to %s for invoice %s",
+                recipient, invoice_id,
+            )
+        else:
+            logger.warning(
+                "SMTP not configured; dead-letter alert would have been sent to %s. "
+                "Subject: %s Body: %s",
+                recipient, subject, body,
+            )
+    except Exception as exc:
+        logger.warning("Failed to send dead-letter alert email: %s", exc)
+
+
+@celery_app.task(
+    bind=True,
+    name="deliver_webhook",
+    autoretry_for=(Exception,),
+    max_retries=5,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    acks_late=True,
+)
+def deliver_webhook_task(self, invoice_id: str) -> dict | None:
+    """Deliver webhook notification with retry and dead-letter tracking.
+
+    Retries on any exception with exponential backoff (max 5 min).
+    After exhausting retries, the delivery is marked as dead_letter
+    and an admin alert email is sent.
+    """
+    attempt = self.request.retries + 1
+    is_last_attempt = self.request.retries >= self.max_retries
+    logger.info(
+        "Webhook delivery attempt %d/%d for invoice %s",
+        attempt, self.max_retries + 1, invoice_id,
+    )
+
+    webhook_url: str | None = None
+
+    try:
         from app.database import async_session_factory
         from app.models.organization import Organization
 
-        async def _get_webhook_url():
+        async def _fetch_webhook_url() -> str | None:
             async with async_session_factory() as s:
                 result = await s.execute(
                     select(Organization).where(Organization.id == "default")
@@ -374,28 +659,103 @@ def _fire_webhook(invoice_id: str, event: str, extraction: dict, validation: dic
                 org = result.scalar_one_or_none()
                 return org.webhook_url if org else None
 
-        webhook_url = asyncio.run(_get_webhook_url())
+        webhook_url = asyncio.run(_fetch_webhook_url())
         if not webhook_url:
-            return
+            logger.info("No webhook configured for invoice %s, skipping", invoice_id)
+            return None
 
-        payload = {
-            "event": event,
-            "invoice_id": invoice_id,
-            "confidence": validation.get("overall_confidence"),
-            "needs_review": validation.get("needs_review", False),
-            "extracted": {
-                "invoice_number": extraction.get("extracted_data", {}).get("invoice_number"),
-                "vendor_name": extraction.get("extracted_data", {}).get("vendor_name"),
-                "grand_total": str(extraction.get("extracted_data", {}).get("grand_total", "")),
-                "currency": extraction.get("extracted_data", {}).get("currency"),
-                "line_items_count": len(extraction.get("line_items", [])),
-            },
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+        import httpx
 
-        httpx.post(webhook_url, json=payload, timeout=10.0)
+        async def _build_and_send():
+            from app.models.invoice import Invoice
+            from sqlalchemy.orm import selectinload
+
+            async with async_session_factory() as session:
+                result = await session.execute(
+                    select(Invoice)
+                    .options(
+                        selectinload(Invoice.extracted_data),
+                        selectinload(Invoice.line_items),
+                    )
+                    .where(Invoice.id == uuid.UUID(invoice_id))
+                )
+                invoice = result.scalar_one_or_none()
+                if not invoice:
+                    raise ValueError(f"Invoice {invoice_id} not found")
+
+                ed = invoice.extracted_data
+                items = invoice.line_items or []
+
+                event = "invoice.needs_review" if invoice.needs_review else "invoice.processed"
+                payload = {
+                    "event": event,
+                    "invoice_id": invoice_id,
+                    "confidence": invoice.confidence_score,
+                    "needs_review": invoice.needs_review,
+                    "extracted": {
+                        "invoice_number": ed.invoice_number if ed else None,
+                        "vendor_name": ed.vendor_name if ed else None,
+                        "grand_total": str(ed.grand_total) if ed and ed.grand_total else "",
+                        "currency": ed.currency if ed else None,
+                        "line_items_count": len(items),
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.post(webhook_url, json=payload)
+                    resp.raise_for_status()
+                    return resp
+
+        resp = asyncio.run(_build_and_send())
+
+        asyncio.run(_record_webhook_delivery(
+            invoice_id=invoice_id,
+            webhook_url=webhook_url,
+            event_type="invoice.processed",
+            attempt_number=attempt,
+            status="delivered",
+            response_code=resp.status_code,
+            response_body=resp.text[:2000],
+        ))
+
+        logger.info("Webhook delivered for invoice %s (attempt %d)", invoice_id, attempt)
+        return {"status": "delivered", "attempt": attempt}
+
     except Exception as exc:
-        logger.warning("Webhook delivery failed: %s", exc)
+        error_msg = str(exc)[:500]
+
+        try:
+            asyncio.run(_record_webhook_delivery(
+                invoice_id=invoice_id,
+                webhook_url=webhook_url or "unknown",
+                event_type="invoice.processed",
+                attempt_number=attempt,
+                status="dead_letter" if is_last_attempt else "failed",
+                response_code=None,
+                error_message=error_msg,
+            ))
+        except Exception as log_exc:
+            logger.warning("Failed to record webhook delivery attempt: %s", log_exc)
+
+        if is_last_attempt:
+            logger.error(
+                "Webhook dead-letter for invoice %s after %d attempts: %s",
+                invoice_id, attempt, error_msg,
+            )
+            try:
+                asyncio.run(_send_admin_dead_letter_alert(
+                    invoice_id, webhook_url or "unknown", error_msg,
+                ))
+            except Exception as alert_exc:
+                logger.warning("Failed to send dead-letter alert: %s", alert_exc)
+        else:
+            logger.warning(
+                "Webhook attempt %d failed for invoice %s, will retry: %s",
+                attempt, invoice_id, error_msg,
+            )
+
+        raise
 
 
 # ─── Celery Tasks ─────────────────────────────────────────────────
@@ -440,3 +800,92 @@ def cleanup_temp_task():
                     os.unlink(fpath)
                 except Exception:
                     pass
+
+
+@celery_app.task(name="check_payment_due_dates")
+def check_payment_due_dates_task():
+    """Daily task: update overdue invoices and send payment reminders.
+
+    - Invoices where due_date < today → payment_status = "overdue"
+    - Invoices where due_date = today + 3 days → send reminder email
+    """
+    import asyncio
+    from datetime import date, timedelta
+
+    asyncio.run(_run_payment_due_date_check())
+
+
+async def _run_payment_due_date_check():
+    """Check all unpaid invoices and update payment statuses."""
+    from app.database import async_session_factory
+    from app.models.invoice import Invoice, PaymentStatus
+    from app.models.processing_log import ProcessingLog
+    from sqlalchemy import select, or_
+    from sqlalchemy.orm import selectinload
+
+    today = date.today()
+    reminder_date = today + timedelta(days=3)
+
+    async with async_session_factory() as session:
+        # Find all unpaid invoices with a due date
+        result = await session.execute(
+            select(Invoice)
+            .options(selectinload(Invoice.extracted_data))
+            .where(
+                Invoice.due_date.isnot(None),
+                or_(
+                    Invoice.payment_status == PaymentStatus.unpaid,
+                    Invoice.payment_status.is_(None),
+                ),
+            )
+        )
+        invoices = result.scalars().all()
+
+        for invoice in invoices:
+            try:
+                if invoice.due_date and invoice.due_date < today:
+                    # Mark as overdue
+                    invoice.payment_status = PaymentStatus.overdue
+                    log = ProcessingLog(
+                        invoice_id=invoice.id,
+                        step="payment_check",
+                        status="overdue",
+                        message=f"Payment overdue since {invoice.due_date}",
+                    )
+                    session.add(log)
+                    logger.info(
+                        "Invoice %s marked overdue (due: %s)",
+                        invoice.id, invoice.due_date,
+                    )
+
+                elif invoice.due_date and invoice.due_date == reminder_date:
+                    # Send reminder email (3 days before due)
+                    from app.services.approval import send_payment_reminder_email
+
+                    ed = invoice.extracted_data
+                    amount_due = float(ed.amount_due) if ed and ed.amount_due else None
+
+                    send_payment_reminder_email(
+                        invoice_id=invoice.id,
+                        vendor_name=ed.vendor_name if ed else None,
+                        due_date=invoice.due_date.isoformat(),
+                        amount_due=amount_due,
+                        recipient_email=settings.payment_reminder_email,
+                    )
+                    log = ProcessingLog(
+                        invoice_id=invoice.id,
+                        step="payment_check",
+                        status="reminder_sent",
+                        message=f"Payment reminder sent for due date {invoice.due_date}",
+                    )
+                    session.add(log)
+                    logger.info(
+                        "Payment reminder sent for invoice %s (due: %s)",
+                        invoice.id, invoice.due_date,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Payment check failed for invoice %s: %s", invoice.id, exc,
+                )
+
+        await session.commit()

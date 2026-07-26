@@ -1,0 +1,83 @@
+{
+  "name": "Invoice Processing — Slack + Airtable",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "invoice-processed",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "channel": {
+          "__rl": true,
+          "value": "C0123456789",
+          "mode": "id"
+        },
+        "text": "=New invoice processed:\n\n*Invoice:* {{ $json.body.invoice_number }}\n*Vendor:* {{ $json.body.vendor_name }}\n*Amount:* {{ $json.body.currency }} {{ $json.body.total_amount }}\n*Status:* {{ $json.body.status }}"
+      },
+      "id": "slack-message",
+      "name": "Send Slack Message",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [550, 300]
+    },
+    {
+      "parameters": {
+        "baseId": {
+          "__rl": true,
+          "value": "appYourBaseId"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "Invoices"
+        },
+        "fieldsToMap": "autoMapInputData",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Invoice Number": "={{ $json.body.invoice_number }}",
+            "Vendor Name": "={{ $json.body.vendor_name }}",
+            "Grand Total": "={{ $json.body.total_amount }}",
+            "Currency": "={{ $json.body.currency }}",
+            "Due Date": "={{ $json.body.due_date }}",
+            "Status": "={{ $json.body.status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "airtable-upsert",
+      "name": "Update Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [550, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": []
+}

@@ -79,6 +79,38 @@ class Settings(BaseSettings):
     airtable_line_items_table: Optional[str] = "Line Items"
     airtable_sync_enabled: bool = False
 
+    # Admin
+    admin_api_key: str = "change-me-admin-key"
+
+    # Xero
+    xero_client_id: Optional[str] = None
+    xero_client_secret: Optional[str] = None
+    xero_enabled: bool = False
+    xero_redirect_uri: str = "http://localhost:8000/api/v1/integrations/xero/callback"
+
+    # Approval Workflow
+    approval_threshold: float = 0.0  # 0 = require approval for all invoices
+    approval_base_url: str = "http://localhost:8000"
+    approval_from_email: str = "noreply@invoiceprocessor.com"
+    approval_recipient_email: str = "admin@example.com"
+
+    # SMTP
+    smtp_host: Optional[str] = None
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_pass: Optional[str] = None
+    smtp_tls: bool = True
+
+    # Payment Reminders
+    payment_reminder_email: str = "accounts@example.com"
+
+    # Webhook / Admin
+    admin_email: str = "admin@example.com"
+
+    # n8n Integration
+    n8n_webhook_url: Optional[str] = None
+    n8n_enabled: bool = False
+
     # Logging
     log_level: str = "INFO"
 
