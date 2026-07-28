@@ -29,8 +29,17 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "InvoiceProcessor"
-    debug: bool = True
-    secret_key: str = "change-me"
+    debug: bool = False
+    secret_key: str = ""
+
+    def validate_security(self) -> None:
+        """Reject placeholder security settings outside an explicit debug environment."""
+        if self.debug:
+            return
+        if not self.secret_key or self.secret_key in {"change-me", "change-me-to-a-random-string"}:
+            raise ValueError("SECRET_KEY must be set to a strong random value when DEBUG=false")
+        if not self.admin_api_key or self.admin_api_key == "change-me-admin-key":
+            raise ValueError("ADMIN_API_KEY must be set when DEBUG=false")
 
     # Database
     database_url: str = "postgresql+asyncpg://invoice_user:invoice_pass@localhost:5432/invoice_processor"
@@ -86,7 +95,7 @@ class Settings(BaseSettings):
     xero_client_id: Optional[str] = None
     xero_client_secret: Optional[str] = None
     xero_enabled: bool = False
-    xero_redirect_uri: str = "http://localhost:8000/api/v1/integrations/xero/callback"
+    xero_redirect_uri: str = "http://localhost:18080/xero-callback"
 
     # Approval Workflow
     approval_threshold: float = 0.0  # 0 = require approval for all invoices

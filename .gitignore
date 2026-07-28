@@ -12,6 +12,20 @@ venv/
 .env
 !.env.example
 
+# Local agent state and worktrees
+.claude/
+
+# Credentials, keys, and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Backups and exports
+scripts/db_backup.json
+
 # Storage
 storage/*
 !storage/.gitkeep

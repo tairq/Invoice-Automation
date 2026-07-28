@@ -5,7 +5,7 @@ services:
     build: .
     container_name: invoice-api
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://invoice_user:invoice_pass@postgres:5432/invoice_processor
       - REDIS_URL=redis://redis:6379/0
@@ -65,7 +65,7 @@ services:
       POSTGRES_PASSWORD: invoice_pass
       POSTGRES_DB: invoice_processor
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -79,7 +79,7 @@ services:
     image: redis:7-alpine
     container_name: invoice-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped

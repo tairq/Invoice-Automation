@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown."""
+    settings.validate_security()
     logger.info("Starting Invoice Processor API...")
     logger.info("Storage backend: %s", settings.storage_backend)
     logger.info("LLM provider: %s", settings.llm_provider)

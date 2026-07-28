@@ -67,6 +67,6 @@ async def get_api_key(
         logger.warning("Rate limiting unavailable (non-fatal): %s", exc)
 
     # Update last_used_at on the key record
-    from sqlalchemy import func as sa_func
+    from datetime import datetime, timezone
 
-    key_record.last_used_at = sa_func.now()
+    key_record.last_used_at = datetime.now(timezone.utc)
