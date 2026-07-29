@@ -26,21 +26,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ---------------------------------------------------------------
-    # 0. Create enum types explicitly before any columns reference them
-    #    (columns below use create_type=False to avoid duplicate-type
-    #     errors when init_db() calls Base.metadata.create_all() at runtime)
+    # 0. Enum types are created implicitly when SQLAlchemy creates
+    #    the tables below (each sa.Enum column emits CREATE TYPE).
+    #    At runtime, init_db() -> create_all() uses checkfirst=True
+    #    so it safely skips types that already exist.
     # ---------------------------------------------------------------
-    # Use DO blocks for idempotent type creation — works on all PG versions
-    # (CREATE TYPE IF NOT EXISTS was added in PG 14, but we need PG 13 compat)
-    op.execute(
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'invoice_status') THEN CREATE TYPE invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review'); END IF; END $$;"  # noqa: E501
-    )
-    op.execute(
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'approval_status') THEN CREATE TYPE approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved'); END IF; END $$;"  # noqa: E501
-    )
-    op.execute(
-        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'po_match_status') THEN CREATE TYPE po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy'); END IF; END $$;"  # noqa: E501
-    )
 
     # ---------------------------------------------------------------
     # 1. organizations
@@ -133,7 +123,6 @@ def upgrade() -> None:
                 "failed",
                 "needs_review",
                 name="invoice_status",
-                create_type=False,
             ),
             nullable=False,
             server_default=sa.text("'pending'"),
@@ -167,7 +156,6 @@ def upgrade() -> None:
                 "rejected",
                 "auto_approved",
                 name="approval_status",
-                create_type=False,
             ),
             nullable=False,
             server_default=sa.text("'pending_approval'"),
@@ -188,7 +176,6 @@ def upgrade() -> None:
                 "unmatched",
                 "discrepancy",
                 name="po_match_status",
-                create_type=False,
             ),
             nullable=True,
         ),
