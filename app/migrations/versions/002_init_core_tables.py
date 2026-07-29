@@ -26,23 +26,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # ---------------------------------------------------------------
-    # 1. Create PostgreSQL enum types
-    # ---------------------------------------------------------------
-    op.execute(
-        "CREATE TYPE invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review')"  # noqa: E501
-    )
-    op.execute("CREATE TYPE invoice_source AS ENUM ('upload', 'email', 'folder', 'api')")
-    op.execute(
-        "CREATE TYPE approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved')"  # noqa: E501
-    )
-    op.execute(
-        "CREATE TYPE po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy')"
-    )
-    op.execute("CREATE TYPE payment_status AS ENUM ('unpaid', 'paid', 'overdue')")
-    op.execute("CREATE TYPE po_status AS ENUM ('open', 'fulfilled', 'cancelled')")
-
-    # ---------------------------------------------------------------
-    # 2. organizations
+    # 1. organizations
     # ---------------------------------------------------------------
     op.create_table(
         "organizations",
@@ -61,7 +45,7 @@ def upgrade() -> None:
     )
 
     # ---------------------------------------------------------------
-    # 3. vendors
+    # 2. vendors
     # ---------------------------------------------------------------
     op.create_table(
         "vendors",
@@ -83,7 +67,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_vendors_canonical_name"), "vendors", ["canonical_name"])
 
     # ---------------------------------------------------------------
-    # 4. purchase_orders
+    # 3. purchase_orders
     # ---------------------------------------------------------------
     op.create_table(
         "purchase_orders",
@@ -95,7 +79,7 @@ def upgrade() -> None:
         sa.Column("currency", sa.String(3), nullable=False, server_default=sa.text("'USD'")),
         sa.Column(
             "status",
-            sa.Enum("open", "fulfilled", "cancelled", name="po_status", create_type=False),
+            sa.Enum("open", "fulfilled", "cancelled", name="po_status"),
             nullable=False,
             server_default=sa.text("'open'"),
         ),
@@ -111,7 +95,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_purchase_orders_po_number"), "purchase_orders", ["po_number"])
 
     # ---------------------------------------------------------------
-    # 5. invoices (xero_invoice_id intentionally omitted — added in 003)
+    # 4. invoices (xero_invoice_id intentionally omitted — added in 003)
     # ---------------------------------------------------------------
     op.create_table(
         "invoices",
@@ -140,7 +124,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "source",
-            sa.Enum("upload", "email", "folder", "api", name="invoice_source", create_type=False),
+            sa.Enum("upload", "email", "folder", "api", name="invoice_source"),
             nullable=False,
             server_default=sa.text("'upload'"),
         ),
@@ -196,7 +180,7 @@ def upgrade() -> None:
         sa.Column("due_date", sa.Date(), nullable=True, index=True),
         sa.Column(
             "payment_status",
-            sa.Enum("unpaid", "paid", "overdue", name="payment_status", create_type=False),
+            sa.Enum("unpaid", "paid", "overdue", name="payment_status"),
             nullable=True,
             server_default=sa.text("'unpaid'"),
             index=True,
@@ -216,7 +200,7 @@ def upgrade() -> None:
     )
 
     # ---------------------------------------------------------------
-    # 6. extracted_data
+    # 5. extracted_data
     # ---------------------------------------------------------------
     op.create_table(
         "extracted_data",
@@ -268,7 +252,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_extracted_data_invoice_number"), "extracted_data", ["invoice_number"])
 
     # ---------------------------------------------------------------
-    # 7. line_items
+    # 6. line_items
     # ---------------------------------------------------------------
     op.create_table(
         "line_items",
@@ -293,7 +277,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_line_items_invoice_id"), "line_items", ["invoice_id"])
 
     # ---------------------------------------------------------------
-    # 8. extraction_confidence
+    # 7. extraction_confidence
     # ---------------------------------------------------------------
     op.create_table(
         "extraction_confidence",
@@ -316,7 +300,7 @@ def upgrade() -> None:
     )
 
     # ---------------------------------------------------------------
-    # 9. processing_logs
+    # 8. processing_logs
     # ---------------------------------------------------------------
     op.create_table(
         "processing_logs",
@@ -334,7 +318,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_processing_logs_invoice_id"), "processing_logs", ["invoice_id"])
 
     # ---------------------------------------------------------------
-    # 10. approval_tokens
+    # 9. approval_tokens
     # ---------------------------------------------------------------
     op.create_table(
         "approval_tokens",
@@ -355,7 +339,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_approval_tokens_token"), "approval_tokens", ["token"])
 
     # ---------------------------------------------------------------
-    # 11. po_matches
+    # 10. po_matches
     # ---------------------------------------------------------------
     op.create_table(
         "po_matches",
@@ -373,7 +357,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_po_matches_po_id"), "po_matches", ["po_id"])
 
     # ---------------------------------------------------------------
-    # 12. webhook_deliveries
+    # 11. webhook_deliveries
     # ---------------------------------------------------------------
     op.create_table(
         "webhook_deliveries",
