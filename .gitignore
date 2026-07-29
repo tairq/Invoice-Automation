@@ -66,6 +66,7 @@ temp/
 # PowerShell helper
 start_email_processor.ps1
 
-# Test artifacts.coverage
+# Test artifacts
+.coverage
 coverage.xml
 test_invoice_processor.db
