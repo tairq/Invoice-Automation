@@ -9,16 +9,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-fra \
-    tesseract-ocr-deu \
-    tesseract-ocr-spa \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies with retry logic
+RUN set -e; \
+    for i in 1 2 3; do \
+      echo "Attempt $i: Updating package lists..."; \
+      if apt-get update; then \
+        echo "Attempt $i: Installing system dependencies..."; \
+        if apt-get install -y --no-install-recommends \
+            tesseract-ocr \
+            tesseract-ocr-eng \
+            tesseract-ocr-fra \
+            tesseract-ocr-deu \
+            tesseract-ocr-spa \
+            libgl1 \
+            libglib2.0-0; then \
+          rm -rf /var/lib/apt/lists/*; \
+          break; \
+        fi; \
+      fi; \
+      sleep 5; \
+      if [ $i -eq 3 ]; then \
+        echo "Failed to install system dependencies after 3 attempts"; \
+        exit 1; \
+      fi; \
+    done
 
 # ── Dependencies ──
 FROM base AS deps
