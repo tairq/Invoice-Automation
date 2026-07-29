@@ -1,7 +1,11 @@
-"""add_xero_tables
+"""Add Xero tables and xero_invoice_id column
 
-Revision ID: 002
-Revises: 001
+Creates the xero_credentials table (with FK to organizations) and adds
+the xero_invoice_id column to invoices.  This was previously migration
+002 but now runs after 002 which creates all core tables.
+
+Revision ID: 003
+Revises: 002
 Create Date: 2026-07-26 14:01:00.000000
 """
 
@@ -13,8 +17,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "002"
-down_revision: Union[str, None] = "001"
+revision: str = "003"
+down_revision: Union[str, None] = "002"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -29,6 +33,7 @@ def upgrade() -> None:
         sa.Column("refresh_token", sa.Text(), nullable=False),
         sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("tenant_id", sa.String(255), nullable=True),
+        sa.Column("tenant_name", sa.String(255), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
