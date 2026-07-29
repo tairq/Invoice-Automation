@@ -1,12 +1,14 @@
 """Tests for Xero sync service."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from xero_python.accounting import CurrencyCode
 
 from app.models.extracted_data import ExtractedData
 from app.models.invoice import Invoice, InvoiceStatus
@@ -54,7 +56,7 @@ class TestBuildXeroInvoice:
         assert payload["Type"] == "ACCREC"
         assert payload["Contact"]["Name"] == "Acme Corp"
         assert payload["Reference"] == "INV-001"
-        assert payload["CurrencyCode"] == "USD"
+        assert payload["CurrencyCode"] == CurrencyCode.USD
         assert len(payload["LineItems"]) == 1
         assert payload["LineItems"][0]["Description"] == "Widget"
         assert payload["LineItems"][0]["Quantity"] == 2.0
@@ -136,7 +138,7 @@ class TestBuildInvoiceModel:
         assert sdk_invoice.type == "ACCREC"
         assert sdk_invoice.contact.name == "Acme Corp"
         assert sdk_invoice.reference == "INV-001"
-        assert sdk_invoice.currency_code == "USD"
+        assert sdk_invoice.currency_code == CurrencyCode.USD
         assert sdk_invoice.status == "AUTHORISED"
         assert len(sdk_invoice.line_items) == 1
         assert sdk_invoice.line_items[0].description == "Widget"
@@ -242,7 +244,8 @@ class TestXeroClient:
         mock_api = MagicMock()
         mock_accounting_api_class.return_value = mock_api
 
-        from xero_python.accounting import Invoice as SdkInvoice, Invoices
+        from xero_python.accounting import Invoice as SdkInvoice
+        from xero_python.accounting import Invoices
 
         mock_api.create_invoices.return_value = Invoices(
             invoices=[SdkInvoice(invoice_id=fake_invoice_id)]
