@@ -1,4 +1,5 @@
 """Tests for Xero sync service."""
+
 from __future__ import annotations
 
 import uuid
@@ -7,7 +8,6 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from xero_python.accounting import CurrencyCode
 
 from app.models.extracted_data import ExtractedData

@@ -1,14 +1,11 @@
 """Preprocessing service — converts invoices to images for LLM vision."""
+
 from __future__ import annotations
 
 import io
 import logging
 import os
 import tempfile
-from pathlib import Path
-from typing import Optional
-
-from app.core.storage import storage
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +63,7 @@ def pdf_to_images(pdf_bytes: bytes, dpi: int = 200) -> list[bytes]:
     return images
 
 
-def convert_to_images(
-    file_bytes: bytes, file_type: str
-) -> list[bytes]:
+def convert_to_images(file_bytes: bytes, file_type: str) -> list[bytes]:
     """Convert an invoice file to one or more PNG images for LLM vision.
 
     Supports PDF, JPEG, PNG, TIFF.
@@ -104,7 +99,6 @@ def enhance_images(image_bytes_list: list[bytes]) -> list[bytes]:
     try:
         import cv2
         import numpy as np
-        from PIL import Image
 
         enhanced = []
         for img_bytes in image_bytes_list:

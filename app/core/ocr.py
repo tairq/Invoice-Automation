@@ -1,4 +1,5 @@
 """OCR engine wrapper — Tesseract fallback for image-based invoices."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -61,7 +62,9 @@ def enhance_image(image_path: str | Path) -> str:
             center = (w // 2, h // 2)
             matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
             img = cv2.warpAffine(
-                img, matrix, (w, h),
+                img,
+                matrix,
+                (w, h),
                 flags=cv2.INTER_CUBIC,
                 borderMode=cv2.BORDER_REPLICATE,
             )

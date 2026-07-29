@@ -1,16 +1,22 @@
 """FastAPI application entry point."""
+
 from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.database import close_db, init_db
 from app.core.redis import close_redis
+from app.database import close_db, init_db
+from app.routers import admin as admin_router
+from app.routers import approvals, exports, integrations, invoices, n8n, webhooks
+from app.services.ingestion import IngestionError
 
 # Configure logging
 logging.basicConfig(
@@ -57,14 +63,6 @@ app.add_middleware(
 )
 
 
-# ─── Exception Handlers ──────────────────────────────────────────
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
-from app.services.ingestion import IngestionError
-
-
 @app.exception_handler(IngestionError)
 async def ingestion_error_handler(request: Request, exc: IngestionError) -> JSONResponse:
     return JSONResponse(
@@ -72,11 +70,6 @@ async def ingestion_error_handler(request: Request, exc: IngestionError) -> JSON
         content={"detail": str(exc)},
     )
 
-
-# ─── Routes ──────────────────────────────────────────────────────
-
-from app.routers import admin as admin_router
-from app.routers import approvals, exports, integrations, invoices, n8n, webhooks
 
 app.include_router(admin_router.router)
 app.include_router(invoices.router)
@@ -90,6 +83,7 @@ app.include_router(n8n.router)
 
 
 # ─── Health Check ────────────────────────────────────────────────
+
 
 @app.get("/health", tags=["System"])
 async def health_check() -> dict:
@@ -112,11 +106,6 @@ async def root() -> dict:
         "health": "/health",
     }
 
-
-# ─── Static Files ────────────────────────────────────────────────
-
-import os
-from pathlib import Path
 
 static_dir = Path(__file__).parent.parent / "storage"
 static_dir.mkdir(exist_ok=True)

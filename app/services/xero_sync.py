@@ -3,6 +3,7 @@
 Uses the ``xero-python`` SDK for Accounting API calls and manages OAuth2
 tokens (PKCE Desktop flow or standard Web app flow) via async DB access.
 """
+
 from __future__ import annotations
 
 import base64
@@ -16,13 +17,17 @@ from uuid import UUID
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from xero_python.accounting import Invoice as SdkInvoice  # noqa: N812 — for attribute_map
 
 from app.config import settings
 from app.models.invoice import Invoice
 from app.models.xero_credential import XeroCredential
-from xero_python.accounting import Invoice as SdkInvoice  # noqa: N812 — for attribute_map
-
-from app.services.xero_client import XeroClient, build_invoice_model, get_valid_credential, refresh_access_token
+from app.services.xero_client import (
+    XeroClient,
+    build_invoice_model,
+    get_valid_credential,
+    refresh_access_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +109,8 @@ async def exchange_code_for_tokens(
     except httpx.HTTPStatusError as exc:
         logger.error(
             "Xero token exchange failed: %s — %s",
-            exc.response.status_code, exc.response.text,
+            exc.response.status_code,
+            exc.response.text,
         )
         return False
     except httpx.RequestError as exc:
@@ -119,8 +125,7 @@ async def exchange_code_for_tokens(
     tenants = await resolve_tenants(access_token)
     if not tenants:
         logger.error(
-            "Could not resolve Xero tenant ID — "
-            "user may need to accept organization invite"
+            "Could not resolve Xero tenant ID — user may need to accept organization invite"
         )
         return False
 
@@ -263,7 +268,8 @@ async def push_invoice_to_xero(
     credential = await get_valid_credential(db, org_id)
     if not credential:
         logger.info(
-            "No Xero credential for org %s — skipping Xero sync", org_id,
+            "No Xero credential for org %s — skipping Xero sync",
+            org_id,
         )
         return None
 

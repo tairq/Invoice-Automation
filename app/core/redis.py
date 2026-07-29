@@ -1,4 +1,5 @@
 """Redis connection pool for rate limiting and caching."""
+
 from __future__ import annotations
 
 import logging

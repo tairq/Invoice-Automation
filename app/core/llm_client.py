@@ -1,11 +1,12 @@
 """LLM API client for AI-powered invoice extraction."""
+
 from __future__ import annotations
 
 import json
 import logging
 import time
 from base64 import b64encode
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -13,7 +14,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-EXTRACTION_SYSTEM_PROMPT = """You are an invoice extraction specialist. Analyze the provided invoice image(s) and extract ALL requested fields with high precision.
+EXTRACTION_SYSTEM_PROMPT = (
+    """You are an invoice extraction specialist. """
+    """Analyze the provided invoice image(s) and extract ALL requested fields with high precision.
 
 ## Rules
 1. Extract values EXACTLY as they appear — do not normalize, correct, or guess
@@ -28,6 +31,7 @@ EXTRACTION_SYSTEM_PROMPT = """You are an invoice extraction specialist. Analyze 
 
 ## Output Format
 Return a JSON object matching the extraction schema precisely."""
+)
 
 
 class LLMClient:
@@ -63,27 +67,36 @@ class LLMClient:
             b64 = self._encode_image(img_bytes)
             if self.provider == "anthropic":
                 # Anthropic format
-                content.append({
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": mime_type,
-                        "data": b64,
-                    },
-                })
+                content.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": mime_type,
+                            "data": b64,
+                        },
+                    }
+                )
             else:
                 # OpenAI-compatible format (OpenAI, custom endpoints)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{mime_type};base64,{b64}",
-                    },
-                })
+                content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime_type};base64,{b64}",
+                        },
+                    }
+                )
 
-        content.append({
-            "type": "text",
-            "text": "Extract all invoice fields from the image(s) above following the extraction schema.",
-        })
+        content.append(
+            {
+                "type": "text",
+                "text": (
+                    "Extract all invoice fields from the image(s) above "
+                    "following the extraction schema."
+                ),
+            }
+        )
 
         return [{"role": "user", "content": content}]
 
@@ -111,11 +124,7 @@ class LLMClient:
         data = resp.json()
 
         # Extract text content from response
-        text_blocks = [
-            b["text"]
-            for b in data.get("content", [])
-            if b.get("type") == "text"
-        ]
+        text_blocks = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
         full_text = "\n".join(text_blocks)
         return self._parse_response(full_text)
 
@@ -193,7 +202,9 @@ class LLMClient:
 
         return json.loads(text)
 
-    def extract(self, image_bytes_list: list[bytes], mime_type: str = "image/png") -> dict[str, Any]:
+    def extract(
+        self, image_bytes_list: list[bytes], mime_type: str = "image/png"
+    ) -> dict[str, Any]:
         """Extract invoice data from image(s) using the configured LLM.
 
         Returns structured dict with all extracted fields and confidences.

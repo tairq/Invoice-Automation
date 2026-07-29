@@ -1,11 +1,12 @@
 """Admin API routes for API key management."""
+
 from __future__ import annotations
 
 import hashlib
 import secrets
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

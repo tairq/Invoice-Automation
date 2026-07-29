@@ -1,4 +1,5 @@
 """Vendor master model for vendor matching."""
+
 from __future__ import annotations
 
 import uuid
@@ -14,9 +15,7 @@ from app.database import Base
 class Vendor(Base):
     __tablename__ = "vendors"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     canonical_name: Mapped[str] = mapped_column(
         String(255), unique=True, nullable=False, index=True
     )
@@ -24,9 +23,7 @@ class Vendor(Base):
     tax_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     payment_terms: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

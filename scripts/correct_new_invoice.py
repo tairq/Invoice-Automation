@@ -1,4 +1,5 @@
 """Normalize the known invoice extraction into the application's schema."""
+
 import sqlite3
 from datetime import datetime, timezone
 
@@ -20,13 +21,23 @@ cur.execute(
        subtotal = ?, tax_total = ?, grand_total = ?, amount_due = ?, amount_paid = ?
        WHERE invoice_id = ?""",
     (
-        "9BF0758D-162828", "invoice", "2026-04-01", "2026-04-01",
-        "EUR", "Customer may be obliged to account for VAT on reverse charge basis.",
+        "9BF0758D-162828",
+        "invoice",
+        "2026-04-01",
+        "2026-04-01",
+        "EUR",
+        "Customer may be obliged to account for VAT on reverse charge basis.",
         "Anthropic Ireland, Limited",
         "6th Floor South Bank House, Barrow Street, Dublin 4, DUBLIN, Co. Dublin, Ireland",
-        "support@anthropic.com", "tariqosmani22@gmail.com's Organization",
+        "support@anthropic.com",
+        "tariqosmani22@gmail.com's Organization",
         "Estonia, Tallinn, F. R. Kreutzwaldi 4, 10120 Tallinn, Estonia",
-        18.00, 4.32, 22.32, 22.32, 0.00, invoice_id,
+        18.00,
+        4.32,
+        22.32,
+        22.32,
+        0.00,
+        invoice_id,
     ),
 )
 cur.execute(
@@ -44,7 +55,11 @@ cur.execute(
 cur.execute(
     """INSERT INTO processing_logs (id, invoice_id, step, status, message, created_at)
        VALUES (lower(hex(randomblob(16))), ?, 'manual_review', 'success', ?, ?)""",
-    (invoice_id, "Verified extracted fields against invoice PDF", datetime.now(timezone.utc).isoformat()),
+    (
+        invoice_id,
+        "Verified extracted fields against invoice PDF",
+        datetime.now(timezone.utc).isoformat(),
+    ),
 )
 conn.commit()
 print(f"Corrected invoice {invoice_id}")

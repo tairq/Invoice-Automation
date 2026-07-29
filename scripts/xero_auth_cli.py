@@ -13,10 +13,10 @@ Prerequisites:
     3. Xero app registered as "Desktop" in Xero Developer Portal
        with redirect URI: http://localhost:18080/xero-callback
 """
+
 from __future__ import annotations
 
 import http.server
-import json
 import logging
 import os
 import sys
@@ -141,9 +141,7 @@ def main() -> int:
     code_verifier = auth_data["code_verifier"]
 
     # ── 2. Start local callback server ───────────────────────────────
-    server_instance = http.server.HTTPServer(
-        ("localhost", CALLBACK_PORT), CallbackHandler
-    )
+    server_instance = http.server.HTTPServer(("localhost", CALLBACK_PORT), CallbackHandler)
     logger.info("")
     logger.info("╔══════════════════════════════════════════════════════════════╗")
     logger.info("║              Xero Desktop Auth — Step 1 of 2              ║")
@@ -184,7 +182,9 @@ def main() -> int:
         logger.error("Token exchange failed. You can retry manually:")
         logger.error("  curl -X POST %s/api/v1/integrations/xero/callback \\", API_BASE)
         logger.error("    -H 'Content-Type: application/json' \\")
-        logger.error("    -d '{\"code\": \"%s\", \"code_verifier\": \"%s\"}'", received_code, code_verifier)
+        logger.error(
+            '    -d \'{"code": "%s", "code_verifier": "%s"}\'', received_code, code_verifier
+        )
         return 1
 
     logger.info("")

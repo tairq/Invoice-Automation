@@ -14,7 +14,6 @@ import asyncio
 import email
 import hashlib
 import imaplib
-import json
 import logging
 import os
 import sys
@@ -22,15 +21,14 @@ import time
 import uuid
 from datetime import datetime
 from email.header import decode_header
-from pathlib import Path
 from typing import Optional
 
 # Ensure the app package is importable
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.config import settings
-from app.database import async_session_factory, init_db
 from app.core.storage import storage
+from app.database import async_session_factory, init_db
 from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus
 from app.models.processing_log import ProcessingLog
 
@@ -57,6 +55,7 @@ ALLOWED_ATTACHMENT_TYPES: dict[str, str] = {
 
 
 # ─── Email Helpers ──────────────────────────────────────────────────
+
 
 def decode_mime_header(header_value: str) -> str:
     """Decode a MIME encoded header value."""
@@ -91,9 +90,8 @@ def is_invoice_attachment(part) -> Optional[str]:
 
 # ─── Logging Helper ─────────────────────────────────────────────────
 
-async def _log_step(
-    session, invoice_id: str, step: str, status: str, message: str
-) -> None:
+
+async def _log_step(session, invoice_id: str, step: str, status: str, message: str) -> None:
     """Create a processing log entry."""
     log = ProcessingLog(
         invoice_id=uuid.UUID(invoice_id),
@@ -106,6 +104,7 @@ async def _log_step(
 
 
 # ─── Pipeline Steps ─────────────────────────────────────────────────
+
 
 async def process_invoice_pipeline(invoice_id: str) -> dict:
     """Run the full processing pipeline for one invoice (inline, no Celery).
@@ -126,6 +125,7 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
         try:
             # Fetch invoice
             from sqlalchemy import select
+
             stmt = select(Invoice).where(Invoice.id == uuid.UUID(invoice_id))
             row = await session.execute(stmt)
             invoice = row.scalar_one_or_none()
@@ -138,17 +138,23 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
             step_start = time.time()
 
             # ── Step 1: Preprocessing ──
-            from app.services.preprocessor import convert_to_images, enhance_images
+            from app.services.preprocessor import convert_to_images
 
             file_bytes = storage.read(invoice.file_path)
             await _log_step(
-                session, invoice_id, "preprocessing", "started",
+                session,
+                invoice_id,
+                "preprocessing",
+                "started",
                 f"Converting {invoice.file_type} ({len(file_bytes)} bytes)",
             )
 
             images = convert_to_images(file_bytes, invoice.file_type)
             await _log_step(
-                session, invoice_id, "preprocessing", "success",
+                session,
+                invoice_id,
+                "preprocessing",
+                "success",
                 f"Converted to {len(images)} image(s)",
             )
 
@@ -157,7 +163,10 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
 
             extraction = extract_invoice_data(images)
             await _log_step(
-                session, invoice_id, "extraction", "success",
+                session,
+                invoice_id,
+                "extraction",
+                "success",
                 f"Extracted {len(extraction.get('line_items', []))} line items",
             )
 
@@ -169,7 +178,10 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
                 extraction["line_items"],
             )
             await _log_step(
-                session, invoice_id, "validation", "success",
+                session,
+                invoice_id,
+                "validation",
+                "success",
                 f"Confidence: {validation['overall_confidence']:.2f}, "
                 f"Errors: {len(validation['validation_errors'])}, "
                 f"Warnings: {len(validation['validation_warnings'])}",
@@ -217,9 +229,7 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
 
             # ── Update invoice status ──
             invoice.status = (
-                InvoiceStatus.needs_review
-                if validation["needs_review"]
-                else InvoiceStatus.done
+                InvoiceStatus.needs_review if validation["needs_review"] else InvoiceStatus.done
             )
             invoice.confidence_score = validation["overall_confidence"]
             invoice.needs_review = validation["needs_review"]
@@ -233,14 +243,19 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
 
             # Log pipeline success (separate commit since we already committed the main data)
             await _log_step(
-                session, invoice_id, "pipeline", "success",
+                session,
+                invoice_id,
+                "pipeline",
+                "success",
                 f"Completed in {time.time() - step_start:.1f}s",
             )
             await session.commit()
 
             logger.info(
                 "Invoice %s done: confidence=%.2f needs_review=%s",
-                invoice_id, validation["overall_confidence"], validation["needs_review"],
+                invoice_id,
+                validation["overall_confidence"],
+                validation["needs_review"],
             )
 
             # ── Step 5: Airtable sync (after DB commit) ──
@@ -273,9 +288,10 @@ async def process_invoice_pipeline(invoice_id: str) -> dict:
 
 async def _sync_to_airtable(invoice_id: str) -> None:
     """Push invoice data to Airtable. Awaits completion so it actually runs."""
-    from app.services.airtable_sync import sync_invoice as airtable_sync
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
+    from app.services.airtable_sync import sync_invoice as airtable_sync
 
     try:
         async with async_session_factory() as session:
@@ -297,8 +313,12 @@ async def _sync_to_airtable(invoice_id: str) -> None:
 
             invoice_dict = {
                 "id": str(invoice.id),
-                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
-                "source": invoice.source.value if hasattr(invoice.source, "value") else invoice.source,
+                "status": invoice.status.value
+                if hasattr(invoice.status, "value")
+                else invoice.status,
+                "source": invoice.source.value
+                if hasattr(invoice.source, "value")
+                else invoice.source,
                 "original_filename": invoice.original_filename,
                 "file_type": invoice.file_type,
                 "file_size": invoice.file_size,
@@ -351,6 +371,7 @@ async def _sync_to_airtable(invoice_id: str) -> None:
 
 # ─── Ingest Attachment ──────────────────────────────────────────────
 
+
 async def create_and_process_attachment(
     attachment_data: bytes, filename: str, sender: str, subject: str
 ) -> Optional[str]:
@@ -390,7 +411,10 @@ async def create_and_process_attachment(
 
         # Log metadata from email
         await _log_step(
-            session, invoice_id, "ingestion", "success",
+            session,
+            invoice_id,
+            "ingestion",
+            "success",
             f"From: {sender}, Subject: {subject}",
         )
         await session.commit()
@@ -404,6 +428,7 @@ async def create_and_process_attachment(
 
 
 # ─── Email Check ────────────────────────────────────────────────────
+
 
 async def check_and_process_emails() -> int:
     """Check Gmail inbox for unseen invoice emails. Returns count processed."""
@@ -453,7 +478,10 @@ async def check_and_process_emails() -> int:
                         continue
 
                     invoice_id = await create_and_process_attachment(
-                        attachment_data, filename, sender, subject,
+                        attachment_data,
+                        filename,
+                        sender,
+                        subject,
                     )
                     if invoice_id:
                         processed += 1
@@ -471,6 +499,7 @@ async def check_and_process_emails() -> int:
 
 
 # ─── Main Loop ──────────────────────────────────────────────────────
+
 
 async def main() -> None:
     """Initialize DB and start the email monitoring loop."""

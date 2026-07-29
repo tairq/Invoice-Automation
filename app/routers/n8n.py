@@ -1,9 +1,8 @@
 """n8n integration API routes."""
+
 from __future__ import annotations
 
-import json
 import logging
-from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException

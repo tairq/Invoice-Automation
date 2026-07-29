@@ -1,11 +1,10 @@
 """Email monitoring service — watches IMAP inbox for invoice attachments."""
+
 from __future__ import annotations
 
 import email
 import imaplib
 import logging
-import os
-import tempfile
 from email.header import decode_header
 from typing import Optional
 
@@ -113,8 +112,8 @@ async def check_email_inbox() -> int:
                         continue
 
                     # Process the invoice
-                    from app.services.ingestion import create_invoice_record
                     from app.database import async_session_factory
+                    from app.services.ingestion import create_invoice_record
 
                     async with async_session_factory() as session:
                         invoice = await create_invoice_record(
@@ -132,7 +131,8 @@ async def check_email_inbox() -> int:
 
                         logger.info(
                             "Queued invoice %s from email: %s",
-                            invoice.id, filename,
+                            invoice.id,
+                            filename,
                         )
 
             except Exception as exc:

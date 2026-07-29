@@ -1,4 +1,5 @@
 """Structured extraction output for an invoice."""
+
 from __future__ import annotations
 
 import uuid
@@ -18,9 +19,7 @@ if TYPE_CHECKING:
 class ExtractedData(Base):
     __tablename__ = "extracted_data"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("invoices.id"), unique=True, nullable=False
     )
@@ -62,7 +61,9 @@ class ExtractedData(Base):
     subtotal: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     tax_total: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     discount_total: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
-    grand_total: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True, index=True)
+    grand_total: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True, index=True
+    )
     amount_due: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     amount_paid: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
 
@@ -70,9 +71,7 @@ class ExtractedData(Base):
     raw_extraction: Mapped[Optional[dict]] = mapped_column(
         "raw_extraction_json", Text, nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationship
     invoice: Mapped[Invoice] = relationship("Invoice", back_populates="extracted_data")

@@ -1,8 +1,8 @@
 """Celery worker — async invoice processing pipeline."""
+
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 import uuid
@@ -56,22 +56,20 @@ logger = logging.getLogger(__name__)
 
 # ─── Helper: async DB session ────────────────────────────────────
 
+
 async def _get_invoice(invoice_id: str):
     """Get invoice from DB using async session."""
     from app.database import async_session_factory
     from app.models.invoice import Invoice
 
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(Invoice).where(Invoice.id == uuid.UUID(invoice_id))
-        )
+        result = await session.execute(select(Invoice).where(Invoice.id == uuid.UUID(invoice_id)))
         return result.scalar_one_or_none(), session
 
 
 async def _run_pipeline(invoice_id: str) -> dict:
     """Execute the full processing pipeline for one invoice."""
-    from app.models.invoice import Invoice, InvoiceStatus
-    from app.models.processing_log import ProcessingLog
+    from app.models.invoice import InvoiceStatus
 
     invoice, session = await _get_invoice(invoice_id)
     if not invoice:
@@ -88,15 +86,25 @@ async def _run_pipeline(invoice_id: str) -> dict:
 
         # ── Step 2: Preprocessing (convert to images) ──
         try:
-            from app.services.preprocessor import convert_to_images, enhance_images
+            from app.services.preprocessor import convert_to_images
 
             file_bytes = storage.read(invoice.file_path)
-            await _log_step(session, invoice_id, "preprocessing", "started",
-                          f"Converting {invoice.file_type} ({len(file_bytes)} bytes)")
+            await _log_step(
+                session,
+                invoice_id,
+                "preprocessing",
+                "started",
+                f"Converting {invoice.file_type} ({len(file_bytes)} bytes)",
+            )
 
             images = convert_to_images(file_bytes, invoice.file_type)
-            await _log_step(session, invoice_id, "preprocessing", "success",
-                          f"Converted to {len(images)} image(s)")
+            await _log_step(
+                session,
+                invoice_id,
+                "preprocessing",
+                "success",
+                f"Converted to {len(images)} image(s)",
+            )
         except Exception as exc:
             await _log_step(session, invoice_id, "preprocessing", "failed", str(exc))
             raise
@@ -106,8 +114,13 @@ async def _run_pipeline(invoice_id: str) -> dict:
             from app.services.extractor import extract_invoice_data
 
             extraction = extract_invoice_data(images)
-            await _log_step(session, invoice_id, "extraction", "success",
-                          f"Extracted {len(extraction.get('line_items', []))} line items")
+            await _log_step(
+                session,
+                invoice_id,
+                "extraction",
+                "success",
+                f"Extracted {len(extraction.get('line_items', []))} line items",
+            )
         except Exception as exc:
             await _log_step(session, invoice_id, "extraction", "failed", str(exc))
             raise
@@ -122,7 +135,10 @@ async def _run_pipeline(invoice_id: str) -> dict:
             )
 
             await _log_step(
-                session, invoice_id, "validation", "success",
+                session,
+                invoice_id,
+                "validation",
+                "success",
                 f"Confidence: {validation['overall_confidence']:.2f}, "
                 f"Errors: {len(validation['validation_errors'])}, "
                 f"Warnings: {len(validation['validation_warnings'])}",
@@ -133,9 +149,7 @@ async def _run_pipeline(invoice_id: str) -> dict:
 
         # ── Step 5: Save to database ──
         try:
-            await _save_extraction_results(
-                session, invoice_id, extraction, validation
-            )
+            await _save_extraction_results(session, invoice_id, extraction, validation)
             await _log_step(session, invoice_id, "save", "success", "Data saved to database")
         except Exception as exc:
             await _log_step(session, invoice_id, "save", "failed", str(exc))
@@ -164,6 +178,7 @@ async def _run_pipeline(invoice_id: str) -> dict:
         # ── Step 8: Payment Terms Parsing ──
         try:
             from datetime import date
+
             from app.services.payment_terms import parse_payment_terms
 
             ed = invoice.extracted_data
@@ -173,7 +188,10 @@ async def _run_pipeline(invoice_id: str) -> dict:
                     invoice.due_date = date.fromisoformat(parsed["due_date"])
                 invoice.payment_status = "unpaid"
                 await _log_step(
-                    session, invoice_id, "payment_terms", "success",
+                    session,
+                    invoice_id,
+                    "payment_terms",
+                    "success",
                     f"Parsed: due_date={parsed.get('due_date')}",
                 )
         except Exception as exc:
@@ -245,27 +263,35 @@ async def _run_pipeline(invoice_id: str) -> dict:
                 if xero_id:
                     invoice.xero_invoice_id = xero_id
                     await _log_step(
-                        session, invoice_id, "xero_sync", "success",
+                        session,
+                        invoice_id,
+                        "xero_sync",
+                        "success",
                         f"Pushed to Xero, InvoiceID={xero_id}",
                     )
                 else:
                     await _log_step(
-                        session, invoice_id, "xero_sync", "skipped",
+                        session,
+                        invoice_id,
+                        "xero_sync",
+                        "skipped",
                         "Xero push skipped (disabled, no credentials, or already synced)",
                     )
             except Exception as exc:
                 logger.warning("Xero sync failed (non-fatal): %s", exc)
                 await _log_step(
-                    session, invoice_id, "xero_sync", "failed", str(exc),
+                    session,
+                    invoice_id,
+                    "xero_sync",
+                    "failed",
+                    str(exc),
                 )
 
         # ── Done ──
         # Don't override status if PO matching already set it to needs_review
         if invoice.status != InvoiceStatus.needs_review:
             invoice.status = (
-                InvoiceStatus.needs_review
-                if validation["needs_review"]
-                else InvoiceStatus.done
+                InvoiceStatus.needs_review if validation["needs_review"] else InvoiceStatus.done
             )
         invoice.confidence_score = validation["overall_confidence"]
         invoice.needs_review = validation["needs_review"] or invoice.needs_review
@@ -274,8 +300,13 @@ async def _run_pipeline(invoice_id: str) -> dict:
         result["confidence"] = validation["overall_confidence"]
         result["needs_review"] = validation["needs_review"]
 
-        await _log_step(session, invoice_id, "pipeline", "success",
-                      f"Completed in {time.time() - step_start:.1f}s")
+        await _log_step(
+            session,
+            invoice_id,
+            "pipeline",
+            "success",
+            f"Completed in {time.time() - step_start:.1f}s",
+        )
 
     except Exception as exc:
         invoice.status = InvoiceStatus.failed
@@ -296,6 +327,8 @@ async def _run_pipeline(invoice_id: str) -> dict:
 
 async def _log_step(session, invoice_id: str, step: str, status: str, message: str):
     """Create a processing log entry."""
+    from app.models.processing_log import ProcessingLog
+
     log = ProcessingLog(
         invoice_id=uuid.UUID(invoice_id),
         step=step,
@@ -321,9 +354,7 @@ async def _save_extraction_results(session, invoice_id: str, extraction: dict, v
     if ed := existing.scalar_one_or_none():
         await session.delete(ed)
 
-    existing_items = await session.execute(
-        select(LineItem).where(LineItem.invoice_id == inv_uuid)
-    )
+    existing_items = await session.execute(select(LineItem).where(LineItem.invoice_id == inv_uuid))
     for item in existing_items.scalars().all():
         await session.delete(item)
 
@@ -368,12 +399,11 @@ def _sync_invoice_to_airtable(invoice_id: str, extraction: dict) -> None:
     from app.services.airtable_sync import sync_invoice
 
     async def _build_and_sync():
-        from app.database import async_session_factory
-        from app.models.extracted_data import ExtractedData
-        from app.models.invoice import Invoice
-        from app.models.line_item import LineItem
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
+
+        from app.database import async_session_factory
+        from app.models.invoice import Invoice
 
         async with async_session_factory() as session:
             result = await session.execute(
@@ -394,8 +424,12 @@ def _sync_invoice_to_airtable(invoice_id: str, extraction: dict) -> None:
 
             invoice_dict = {
                 "id": str(invoice.id),
-                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
-                "source": invoice.source.value if hasattr(invoice.source, "value") else invoice.source,
+                "status": (
+                    invoice.status.value if hasattr(invoice.status, "value") else invoice.status
+                ),
+                "source": (
+                    invoice.source.value if hasattr(invoice.source, "value") else invoice.source
+                ),
                 "original_filename": invoice.original_filename,
                 "file_type": invoice.file_type,
                 "file_size": invoice.file_size,
@@ -467,18 +501,18 @@ def _sync_invoice_to_airtable(invoice_id: str, extraction: dict) -> None:
 
 # ─── n8n Integration ─────────────────────────────────────────────
 
+
 def _trigger_n8n(invoice_id: str) -> None:
     """Fire n8n webhook with full invoice payload (fire-and-forget).
 
     Only called when N8N_ENABLED=true and N8N_WEBHOOK_URL is set.
     """
     import httpx
-    from app.database import async_session_factory
-    from app.models.extracted_data import ExtractedData
-    from app.models.invoice import Invoice
-    from app.models.line_item import LineItem
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
+
+    from app.database import async_session_factory
+    from app.models.invoice import Invoice
 
     async def _do_trigger():
         async with async_session_factory() as session:
@@ -500,7 +534,9 @@ def _trigger_n8n(invoice_id: str) -> None:
 
             payload = {
                 "id": str(invoice.id),
-                "status": invoice.status.value if hasattr(invoice.status, "value") else invoice.status,
+                "status": (
+                    invoice.status.value if hasattr(invoice.status, "value") else invoice.status
+                ),
                 "vendor_name": ed.vendor_name if ed else None,
                 "total_amount": float(ed.grand_total) if ed and ed.grand_total else None,
                 "currency": ed.currency if ed else None,
@@ -529,13 +565,16 @@ def _trigger_n8n(invoice_id: str) -> None:
 
             logger.info(
                 "n8n trigger: invoice %s -> %s (status=%s)",
-                invoice_id, settings.n8n_webhook_url, resp.status_code,
+                invoice_id,
+                settings.n8n_webhook_url,
+                resp.status_code,
             )
 
     asyncio.run(_do_trigger())
 
 
 # ─── Webhook Delivery (Celery Task) ──────────────────────────────
+
 
 async def _record_webhook_delivery(
     invoice_id: str,
@@ -574,9 +613,9 @@ async def _send_admin_dead_letter_alert(invoice_id: str, webhook_url: str, error
     recipient = settings.admin_email
     if not recipient:
         logger.warning(
-            "Dead-letter alert not sent: ADMIN_EMAIL not configured "
-            "(invoice=%s webhook=%s)",
-            invoice_id, webhook_url,
+            "Dead-letter alert not sent: ADMIN_EMAIL not configured (invoice=%s webhook=%s)",
+            invoice_id,
+            webhook_url,
         )
         return
 
@@ -600,9 +639,7 @@ async def _send_admin_dead_letter_alert(invoice_id: str, webhook_url: str, error
         msg.set_content(body)
 
         if settings.smtp_host:
-            with smtplib.SMTP(
-                settings.smtp_host, settings.smtp_port, timeout=10.0
-            ) as smtp:
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10.0) as smtp:
                 if settings.smtp_tls:
                     smtp.starttls()
                 if settings.smtp_user:
@@ -610,13 +647,16 @@ async def _send_admin_dead_letter_alert(invoice_id: str, webhook_url: str, error
                 smtp.send_message(msg)
             logger.info(
                 "Dead-letter alert sent to %s for invoice %s",
-                recipient, invoice_id,
+                recipient,
+                invoice_id,
             )
         else:
             logger.warning(
                 "SMTP not configured; dead-letter alert would have been sent to %s. "
                 "Subject: %s Body: %s",
-                recipient, subject, body,
+                recipient,
+                subject,
+                body,
             )
     except Exception as exc:
         logger.warning("Failed to send dead-letter alert email: %s", exc)
@@ -642,7 +682,9 @@ def deliver_webhook_task(self, invoice_id: str) -> dict | None:
     is_last_attempt = self.request.retries >= self.max_retries
     logger.info(
         "Webhook delivery attempt %d/%d for invoice %s",
-        attempt, self.max_retries + 1, invoice_id,
+        attempt,
+        self.max_retries + 1,
+        invoice_id,
     )
 
     webhook_url: str | None = None
@@ -653,9 +695,7 @@ def deliver_webhook_task(self, invoice_id: str) -> dict | None:
 
         async def _fetch_webhook_url() -> str | None:
             async with async_session_factory() as s:
-                result = await s.execute(
-                    select(Organization).where(Organization.id == "default")
-                )
+                result = await s.execute(select(Organization).where(Organization.id == "default"))
                 org = result.scalar_one_or_none()
                 return org.webhook_url if org else None
 
@@ -667,8 +707,9 @@ def deliver_webhook_task(self, invoice_id: str) -> dict | None:
         import httpx
 
         async def _build_and_send():
-            from app.models.invoice import Invoice
             from sqlalchemy.orm import selectinload
+
+            from app.models.invoice import Invoice
 
             async with async_session_factory() as session:
                 result = await session.execute(
@@ -709,15 +750,17 @@ def deliver_webhook_task(self, invoice_id: str) -> dict | None:
 
         resp = asyncio.run(_build_and_send())
 
-        asyncio.run(_record_webhook_delivery(
-            invoice_id=invoice_id,
-            webhook_url=webhook_url,
-            event_type="invoice.processed",
-            attempt_number=attempt,
-            status="delivered",
-            response_code=resp.status_code,
-            response_body=resp.text[:2000],
-        ))
+        asyncio.run(
+            _record_webhook_delivery(
+                invoice_id=invoice_id,
+                webhook_url=webhook_url,
+                event_type="invoice.processed",
+                attempt_number=attempt,
+                status="delivered",
+                response_code=resp.status_code,
+                response_body=resp.text[:2000],
+            )
+        )
 
         logger.info("Webhook delivered for invoice %s (attempt %d)", invoice_id, attempt)
         return {"status": "delivered", "attempt": attempt}
@@ -726,39 +769,50 @@ def deliver_webhook_task(self, invoice_id: str) -> dict | None:
         error_msg = str(exc)[:500]
 
         try:
-            asyncio.run(_record_webhook_delivery(
-                invoice_id=invoice_id,
-                webhook_url=webhook_url or "unknown",
-                event_type="invoice.processed",
-                attempt_number=attempt,
-                status="dead_letter" if is_last_attempt else "failed",
-                response_code=None,
-                error_message=error_msg,
-            ))
+            asyncio.run(
+                _record_webhook_delivery(
+                    invoice_id=invoice_id,
+                    webhook_url=webhook_url or "unknown",
+                    event_type="invoice.processed",
+                    attempt_number=attempt,
+                    status="dead_letter" if is_last_attempt else "failed",
+                    response_code=None,
+                    error_message=error_msg,
+                )
+            )
         except Exception as log_exc:
             logger.warning("Failed to record webhook delivery attempt: %s", log_exc)
 
         if is_last_attempt:
             logger.error(
                 "Webhook dead-letter for invoice %s after %d attempts: %s",
-                invoice_id, attempt, error_msg,
+                invoice_id,
+                attempt,
+                error_msg,
             )
             try:
-                asyncio.run(_send_admin_dead_letter_alert(
-                    invoice_id, webhook_url or "unknown", error_msg,
-                ))
+                asyncio.run(
+                    _send_admin_dead_letter_alert(
+                        invoice_id,
+                        webhook_url or "unknown",
+                        error_msg,
+                    )
+                )
             except Exception as alert_exc:
                 logger.warning("Failed to send dead-letter alert: %s", alert_exc)
         else:
             logger.warning(
                 "Webhook attempt %d failed for invoice %s, will retry: %s",
-                attempt, invoice_id, error_msg,
+                attempt,
+                invoice_id,
+                error_msg,
             )
 
         raise
 
 
 # ─── Celery Tasks ─────────────────────────────────────────────────
+
 
 @celery_app.task(bind=True, name="process_invoice", max_retries=3)
 def process_invoice_task(self, invoice_id: str):
@@ -767,7 +821,9 @@ def process_invoice_task(self, invoice_id: str):
         result = asyncio.run(_run_pipeline(invoice_id))
         logger.info(
             "Invoice %s processed: status=%s confidence=%.2f",
-            invoice_id, result["status"], result["confidence"],
+            invoice_id,
+            result["status"],
+            result["confidence"],
         )
         return result
     except Exception as exc:
@@ -810,18 +866,20 @@ def check_payment_due_dates_task():
     - Invoices where due_date = today + 3 days → send reminder email
     """
     import asyncio
-    from datetime import date, timedelta
 
     asyncio.run(_run_payment_due_date_check())
 
 
 async def _run_payment_due_date_check():
     """Check all unpaid invoices and update payment statuses."""
+    from datetime import date, timedelta
+
+    from sqlalchemy import or_, select
+    from sqlalchemy.orm import selectinload
+
     from app.database import async_session_factory
     from app.models.invoice import Invoice, PaymentStatus
     from app.models.processing_log import ProcessingLog
-    from sqlalchemy import select, or_
-    from sqlalchemy.orm import selectinload
 
     today = date.today()
     reminder_date = today + timedelta(days=3)
@@ -855,7 +913,8 @@ async def _run_payment_due_date_check():
                     session.add(log)
                     logger.info(
                         "Invoice %s marked overdue (due: %s)",
-                        invoice.id, invoice.due_date,
+                        invoice.id,
+                        invoice.due_date,
                     )
 
                 elif invoice.due_date and invoice.due_date == reminder_date:
@@ -881,11 +940,14 @@ async def _run_payment_due_date_check():
                     session.add(log)
                     logger.info(
                         "Payment reminder sent for invoice %s (due: %s)",
-                        invoice.id, invoice.due_date,
+                        invoice.id,
+                        invoice.due_date,
                     )
             except Exception as exc:
                 logger.warning(
-                    "Payment check failed for invoice %s: %s", invoice.id, exc,
+                    "Payment check failed for invoice %s: %s",
+                    invoice.id,
+                    exc,
                 )
 
         await session.commit()

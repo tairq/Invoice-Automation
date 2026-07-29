@@ -1,4 +1,5 @@
 """Check available Xero tenant connections."""
+
 import asyncio
 import os
 import sys
@@ -40,7 +41,9 @@ async def main():
 
         if not connections:
             print("No Xero tenant connections found!")
-            print("Go to https://developer.xero.com/app/manage and check your app has been connected to an org.")
+            print(
+                "Go to https://developer.xero.com/app/manage and check your app has been connected to an org."
+            )
             return
 
         for conn in connections:
@@ -49,9 +52,9 @@ async def main():
             print(f"  Type:       {conn.get('tenantType')}")
             print(f"  Active:     {conn.get('isActive')}")
 
-        print(f"\n---")
+        print("\n---")
         print(f"Currently configured tenant: {credential.tenant_id}")
-        print(f"Demo orgs are typically named 'Demo Company'")
+        print("Demo orgs are typically named 'Demo Company'")
 
         if len(connections) > 1:
             print("\n⚠️  You have multiple Xero orgs available.")

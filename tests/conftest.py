@@ -1,11 +1,12 @@
 """Pytest fixtures for invoice processor tests."""
+
 from __future__ import annotations
 
 import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator
 from unittest.mock import patch
 
 import pytest
@@ -23,11 +24,11 @@ os.environ["ANTHROPIC_API_KEY"] = "test-key"
 os.environ["CONFIDENCE_THRESHOLD"] = "0.5"
 os.environ["DEBUG"] = "false"
 
-from app.database import Base, get_session  # noqa: auto-import
-from app.main import app  # noqa: auto-import
+from app.database import Base, get_session  # noqa
+from app.main import app  # noqa
 
 # Bypass API key auth for all tests by default
-from app.core.auth import get_api_key  # noqa: auto-import
+from app.core.auth import get_api_key  # noqa
 
 
 async def _bypass_auth() -> None:

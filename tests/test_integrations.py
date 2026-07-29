@@ -1,9 +1,9 @@
 """Tests for integration routes (Xero)."""
+
 from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from httpx import AsyncClient
 
 from app.config import settings
@@ -11,8 +11,10 @@ from app.config import settings
 
 class TestXeroConnect:
     async def test_connect_returns_url(self, client: AsyncClient):
-        with patch.object(settings, "xero_enabled", True), \
-             patch.object(settings, "xero_client_id", "test-id"):
+        with (
+            patch.object(settings, "xero_enabled", True),
+            patch.object(settings, "xero_client_id", "test-id"),
+        ):
             resp = await client.get("/api/v1/integrations/xero/connect")
             assert resp.status_code == 200
             data = resp.json()
@@ -34,9 +36,11 @@ class TestXeroCallback:
         assert resp.status_code == 422  # Missing required field
 
     async def test_callback_success(self, client: AsyncClient):
-        with patch.object(settings, "xero_enabled", True), \
-             patch.object(settings, "xero_client_id", "test-id"), \
-             patch("app.routers.integrations.exchange_code_for_tokens") as mock:
+        with (
+            patch.object(settings, "xero_enabled", True),
+            patch.object(settings, "xero_client_id", "test-id"),
+            patch("app.routers.integrations.exchange_code_for_tokens") as mock,
+        ):
             mock.return_value = True
             connect = await client.get("/api/v1/integrations/xero/connect")
             connect_data = connect.json()

@@ -1,13 +1,25 @@
 """Invoice model — the central entity."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 from enum import Enum as PyEnum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text, Uuid, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    Uuid,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -20,7 +32,6 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.po_match import POMatch
     from app.models.processing_log import ProcessingLog
-    from app.models.vendor import Vendor
     from app.models.webhook_delivery import WebhookDelivery
 
 
@@ -62,9 +73,7 @@ class InvoiceSource(str, PyEnum):
 class Invoice(Base):
     __tablename__ = "invoices"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         Uuid, ForeignKey("organizations.id"), nullable=True, index=True
     )
@@ -85,9 +94,7 @@ class Invoice(Base):
     needs_review: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    xero_invoice_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    xero_invoice_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     # Approval workflow
     approval_status: Mapped[ApprovalStatus] = mapped_column(

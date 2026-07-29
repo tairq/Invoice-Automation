@@ -1,4 +1,5 @@
 """API key authentication dependency with rate limiting."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,6 +10,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import APIKeyHeader
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.models.api_key import ApiKey
@@ -21,7 +23,7 @@ API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def get_api_key(
     request: Request,
     api_key: Optional[str] = Depends(API_KEY_HEADER),
-    db: "AsyncSession" = Depends(get_session),  # type: ignore[name-defined]
+    db: AsyncSession = Depends(get_session),
 ) -> None:
     """Validate API key from X-API-Key header and enforce rate limits.
 

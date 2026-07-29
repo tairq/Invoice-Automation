@@ -1,10 +1,10 @@
 """PO / 3-way matching service — match invoices against purchase orders."""
+
 from __future__ import annotations
 
 import json
 import logging
 import uuid
-from decimal import Decimal
 from typing import Any
 
 from rapidfuzz import fuzz
@@ -25,9 +25,7 @@ async def match_purchase_order(invoice_id: str, db: AsyncSession | None = None) 
 
     Returns a dict with match result information.
     """
-    from app.models.extracted_data import ExtractedData
-    from app.models.invoice import Invoice, InvoiceStatus
-    from app.models.line_item import LineItem
+    from app.models.invoice import InvoiceStatus
     from app.models.po_match import POMatch
     from app.models.processing_log import ProcessingLog
     from app.models.purchase_order import PurchaseOrder
@@ -63,9 +61,7 @@ async def match_purchase_order(invoice_id: str, db: AsyncSession | None = None) 
             return {"matched": False, "reason": "No extracted data"}
 
         # Load all open POs
-        po_result = await db.execute(
-            select(PurchaseOrder).where(PurchaseOrder.status == "open")
-        )
+        po_result = await db.execute(select(PurchaseOrder).where(PurchaseOrder.status == "open"))
         all_pos = po_result.scalars().all()
 
         if not all_pos:
@@ -76,17 +72,18 @@ async def match_purchase_order(invoice_id: str, db: AsyncSession | None = None) 
 
         # Build search text from extracted data
         search_text = " ".join(
-            str(v) for v in [
+            str(v)
+            for v in [
                 ed.invoice_number,
                 ed.po_number,
                 ed.notes,
                 ed.vendor_name,
-            ] if v
+            ]
+            if v
         ).lower()
 
         best_match = None
         best_score = 0.0
-        best_match_type = None
 
         for po in all_pos:
             # 1. Direct PO number match
@@ -159,7 +156,10 @@ async def match_purchase_order(invoice_id: str, db: AsyncSession | None = None) 
 
         logger.info(
             "Invoice %s matched to PO %s (score=%.1f, discrepancies=%d)",
-            invoice_id, best_match.po_number, best_score, len(discrepancies),
+            invoice_id,
+            best_match.po_number,
+            best_score,
+            len(discrepancies),
         )
 
         return {
@@ -229,11 +229,13 @@ def _compare_line_items(
             if best_fuzzy_score >= 80:
                 poi = best_fuzzy
             else:
-                discrepancies.append({
-                    "item": desc,
-                    "type": "missing_in_po",
-                    "detail": f"Line item '{inv_item.description}' not found in PO",
-                })
+                discrepancies.append(
+                    {
+                        "item": desc,
+                        "type": "missing_in_po",
+                        "detail": f"Line item '{inv_item.description}' not found in PO",
+                    }
+                )
                 continue
 
         # Compare quantity
@@ -242,13 +244,15 @@ def _compare_line_items(
         if inv_qty is not None and po_qty is not None and po_qty > 0:
             qty_var = abs(inv_qty - po_qty) / po_qty
             if qty_var > LINE_ITEM_VARIANCE_THRESHOLD:
-                discrepancies.append({
-                    "item": desc,
-                    "type": "quantity_variance",
-                    "expected": po_qty,
-                    "actual": inv_qty,
-                    "variance_pct": round(qty_var * 100, 2),
-                })
+                discrepancies.append(
+                    {
+                        "item": desc,
+                        "type": "quantity_variance",
+                        "expected": po_qty,
+                        "actual": inv_qty,
+                        "variance_pct": round(qty_var * 100, 2),
+                    }
+                )
 
         # Compare unit price
         inv_price = _to_float(inv_item.unit_price)
@@ -256,13 +260,15 @@ def _compare_line_items(
         if inv_price is not None and po_price is not None and po_price > 0:
             price_var = abs(inv_price - po_price) / po_price
             if price_var > LINE_ITEM_VARIANCE_THRESHOLD:
-                discrepancies.append({
-                    "item": desc,
-                    "type": "unit_price_variance",
-                    "expected": po_price,
-                    "actual": inv_price,
-                    "variance_pct": round(price_var * 100, 2),
-                })
+                discrepancies.append(
+                    {
+                        "item": desc,
+                        "type": "unit_price_variance",
+                        "expected": po_price,
+                        "actual": inv_price,
+                        "variance_pct": round(price_var * 100, 2),
+                    }
+                )
 
     return discrepancies
 

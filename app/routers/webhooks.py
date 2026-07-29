@@ -1,12 +1,12 @@
 """Webhook configuration API routes."""
+
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_api_key
 from app.database import get_session
@@ -28,9 +28,7 @@ async def configure_webhook(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Configure webhook URL for invoice events."""
-    result = await db.execute(
-        select(Organization).where(Organization.id == organization_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == organization_id))
     org = result.scalar_one_or_none()
 
     if not org:
@@ -61,9 +59,7 @@ async def get_webhook_config(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Get current webhook configuration."""
-    result = await db.execute(
-        select(Organization).where(Organization.id == organization_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == organization_id))
     org = result.scalar_one_or_none()
 
     if not org or not org.webhook_url:
@@ -89,9 +85,7 @@ async def get_webhook_deliveries(
     db: AsyncSession = Depends(get_session),
 ) -> list[WebhookDeliveryResponse]:
     """Get webhook delivery history with optional filtering."""
-    query = select(WebhookDelivery).order_by(
-        WebhookDelivery.created_at.desc()
-    )
+    query = select(WebhookDelivery).order_by(WebhookDelivery.created_at.desc())
 
     if invoice_id:
         query = query.where(WebhookDelivery.invoice_id == invoice_id)
@@ -102,6 +96,4 @@ async def get_webhook_deliveries(
     result = await db.execute(query)
     deliveries = result.scalars().all()
 
-    return [
-        WebhookDeliveryResponse.model_validate(d) for d in deliveries
-    ]
+    return [WebhookDeliveryResponse.model_validate(d) for d in deliveries]

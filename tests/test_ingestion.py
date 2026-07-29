@@ -1,13 +1,11 @@
 """Tests for the ingestion service."""
+
 from __future__ import annotations
 
-import uuid
-
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus
+from app.models.invoice import InvoiceSource, InvoiceStatus
 from app.services.ingestion import IngestionError, create_invoice_record, validate_file
 
 

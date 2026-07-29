@@ -4,13 +4,13 @@ Revision ID: 003
 Revises: 002
 Create Date: 2026-07-26 15:00:00.000000
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "003"
@@ -23,25 +23,35 @@ def upgrade() -> None:
     # ── Create ENUM types (PostgreSQL) ──────────────────────────────
     # approval_status: pending_approval / approved / rejected / auto_approved
     sa.Enum(
-        "pending_approval", "approved", "rejected", "auto_approved",
+        "pending_approval",
+        "approved",
+        "rejected",
+        "auto_approved",
         name="approval_status",
     ).create(op.get_bind(), checkfirst=True)
 
     # po_match_status: matched / partial / unmatched / discrepancy
     sa.Enum(
-        "matched", "partial", "unmatched", "discrepancy",
+        "matched",
+        "partial",
+        "unmatched",
+        "discrepancy",
         name="po_match_status",
     ).create(op.get_bind(), checkfirst=True)
 
     # payment_status: unpaid / paid / overdue
     sa.Enum(
-        "unpaid", "paid", "overdue",
+        "unpaid",
+        "paid",
+        "overdue",
         name="payment_status",
     ).create(op.get_bind(), checkfirst=True)
 
     # po_status: open / fulfilled / cancelled
     sa.Enum(
-        "open", "fulfilled", "cancelled",
+        "open",
+        "fulfilled",
+        "cancelled",
         name="po_status",
     ).create(op.get_bind(), checkfirst=True)
 
@@ -55,22 +65,31 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("action", sa.String(20), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         op.f("ix_approval_tokens_invoice_id"),
-        "approval_tokens", ["invoice_id"],
+        "approval_tokens",
+        ["invoice_id"],
     )
     op.create_index(
         op.f("ix_approval_tokens_token"),
-        "approval_tokens", ["token"],
+        "approval_tokens",
+        ["token"],
         unique=True,
     )
     op.create_foreign_key(
         "fk_approval_tokens_invoice_id",
-        "approval_tokens", "invoices",
-        ["invoice_id"], ["id"],
+        "approval_tokens",
+        "invoices",
+        ["invoice_id"],
+        ["id"],
     )
 
     # ── Create purchase_orders table ────────────────────────────────
@@ -82,18 +101,31 @@ def upgrade() -> None:
         sa.Column("line_items", sa.Text(), nullable=True),
         sa.Column("total_amount", sa.Numeric(12, 2), nullable=True),
         sa.Column("currency", sa.String(3), nullable=False, server_default=sa.text("'USD'")),
-        sa.Column("status",
-                  sa.Enum("open", "fulfilled", "cancelled",
-                          name="po_status", create_type=False),
-                  nullable=False, server_default=sa.text("'open'")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "status",
+            sa.Enum("open", "fulfilled", "cancelled", name="po_status", create_type=False),
+            nullable=False,
+            server_default=sa.text("'open'"),
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("po_number"),
     )
     op.create_index(
         op.f("ix_purchase_orders_po_number"),
-        "purchase_orders", ["po_number"],
+        "purchase_orders",
+        ["po_number"],
     )
 
     # ── Create po_matches table ─────────────────────────────────────
@@ -104,26 +136,37 @@ def upgrade() -> None:
         sa.Column("po_id", sa.Uuid(), nullable=False),
         sa.Column("match_confidence", sa.Float(), nullable=False, server_default=sa.text("0.0")),
         sa.Column("discrepancies", sa.Text(), nullable=True),
-        sa.Column("matched_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "matched_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         op.f("ix_po_matches_invoice_id"),
-        "po_matches", ["invoice_id"],
+        "po_matches",
+        ["invoice_id"],
     )
     op.create_index(
         op.f("ix_po_matches_po_id"),
-        "po_matches", ["po_id"],
+        "po_matches",
+        ["po_id"],
     )
     op.create_foreign_key(
         "fk_po_matches_invoice_id",
-        "po_matches", "invoices",
-        ["invoice_id"], ["id"],
+        "po_matches",
+        "invoices",
+        ["invoice_id"],
+        ["id"],
     )
     op.create_foreign_key(
         "fk_po_matches_po_id",
-        "po_matches", "purchase_orders",
-        ["po_id"], ["id"],
+        "po_matches",
+        "purchase_orders",
+        ["po_id"],
+        ["id"],
     )
 
     # ── Create vendors table ────────────────────────────────────────
@@ -135,28 +178,49 @@ def upgrade() -> None:
         sa.Column("tax_id", sa.String(100), nullable=True),
         sa.Column("payment_terms", sa.String(255), nullable=True),
         sa.Column("is_approved", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("canonical_name"),
     )
     op.create_index(
         op.f("ix_vendors_canonical_name"),
-        "vendors", ["canonical_name"],
+        "vendors",
+        ["canonical_name"],
     )
 
     # ── Add columns to invoices ─────────────────────────────────────
     # Approval workflow
     op.add_column(
         "invoices",
-        sa.Column("approval_status",
-                  sa.Enum("pending_approval", "approved", "rejected", "auto_approved",
-                          name="approval_status", create_type=False),
-                  nullable=False, server_default=sa.text("'pending_approval'")),
+        sa.Column(
+            "approval_status",
+            sa.Enum(
+                "pending_approval",
+                "approved",
+                "rejected",
+                "auto_approved",
+                name="approval_status",
+                create_type=False,
+            ),
+            nullable=False,
+            server_default=sa.text("'pending_approval'"),
+        ),
     )
     op.create_index(
         op.f("ix_invoices_approval_status"),
-        "invoices", ["approval_status"],
+        "invoices",
+        ["approval_status"],
     )
 
     # PO matching
@@ -166,19 +230,30 @@ def upgrade() -> None:
     )
     op.add_column(
         "invoices",
-        sa.Column("po_match_status",
-                  sa.Enum("matched", "partial", "unmatched", "discrepancy",
-                          name="po_match_status", create_type=False),
-                  nullable=True),
+        sa.Column(
+            "po_match_status",
+            sa.Enum(
+                "matched",
+                "partial",
+                "unmatched",
+                "discrepancy",
+                name="po_match_status",
+                create_type=False,
+            ),
+            nullable=True,
+        ),
     )
     op.create_index(
         op.f("ix_invoices_matched_po_id"),
-        "invoices", ["matched_po_id"],
+        "invoices",
+        ["matched_po_id"],
     )
     op.create_foreign_key(
         "fk_invoices_matched_po_id",
-        "invoices", "purchase_orders",
-        ["matched_po_id"], ["id"],
+        "invoices",
+        "purchase_orders",
+        ["matched_po_id"],
+        ["id"],
     )
 
     # Vendor matching
@@ -192,12 +267,15 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_invoices_vendor_id"),
-        "invoices", ["vendor_id"],
+        "invoices",
+        ["vendor_id"],
     )
     op.create_foreign_key(
         "fk_invoices_vendor_id",
-        "invoices", "vendors",
-        ["vendor_id"], ["id"],
+        "invoices",
+        "vendors",
+        ["vendor_id"],
+        ["id"],
     )
 
     # Payment tracking
@@ -207,18 +285,22 @@ def upgrade() -> None:
     )
     op.add_column(
         "invoices",
-        sa.Column("payment_status",
-                  sa.Enum("unpaid", "paid", "overdue",
-                          name="payment_status", create_type=False),
-                  nullable=True, server_default=sa.text("'unpaid'")),
+        sa.Column(
+            "payment_status",
+            sa.Enum("unpaid", "paid", "overdue", name="payment_status", create_type=False),
+            nullable=True,
+            server_default=sa.text("'unpaid'"),
+        ),
     )
     op.create_index(
         op.f("ix_invoices_due_date"),
-        "invoices", ["due_date"],
+        "invoices",
+        ["due_date"],
     )
     op.create_index(
         op.f("ix_invoices_payment_status"),
-        "invoices", ["payment_status"],
+        "invoices",
+        ["payment_status"],
     )
 
     # ── Add columns to extracted_data ───────────────────────────────
@@ -232,12 +314,15 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_extracted_data_vendor_id"),
-        "extracted_data", ["vendor_id"],
+        "extracted_data",
+        ["vendor_id"],
     )
     op.create_foreign_key(
         "fk_extracted_data_vendor_id",
-        "extracted_data", "vendors",
-        ["vendor_id"], ["id"],
+        "extracted_data",
+        "vendors",
+        ["vendor_id"],
+        ["id"],
     )
 
 
@@ -245,7 +330,8 @@ def downgrade() -> None:
     # ── Drop columns from extracted_data ────────────────────────────
     op.drop_constraint(
         "fk_extracted_data_vendor_id",
-        "extracted_data", type_="foreignkey",
+        "extracted_data",
+        type_="foreignkey",
     )
     op.drop_index(
         op.f("ix_extracted_data_vendor_id"),
@@ -264,7 +350,8 @@ def downgrade() -> None:
     # Vendor matching
     op.drop_constraint(
         "fk_invoices_vendor_id",
-        "invoices", type_="foreignkey",
+        "invoices",
+        type_="foreignkey",
     )
     op.drop_index(op.f("ix_invoices_vendor_id"), table_name="invoices")
     op.drop_column("invoices", "match_confidence")
@@ -273,7 +360,8 @@ def downgrade() -> None:
     # PO matching
     op.drop_constraint(
         "fk_invoices_matched_po_id",
-        "invoices", type_="foreignkey",
+        "invoices",
+        type_="foreignkey",
     )
     op.drop_index(op.f("ix_invoices_matched_po_id"), table_name="invoices")
     op.drop_column("invoices", "po_match_status")

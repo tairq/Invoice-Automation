@@ -1,4 +1,5 @@
 """Application configuration via pydantic-settings."""
+
 from __future__ import annotations
 
 import os
@@ -42,7 +43,9 @@ class Settings(BaseSettings):
             raise ValueError("ADMIN_API_KEY must be set when DEBUG=false")
 
     # Database
-    database_url: str = "postgresql+asyncpg://invoice_user:invoice_pass@localhost:5432/invoice_processor"
+    database_url: str = (
+        "postgresql+asyncpg://invoice_user:invoice_pass@localhost:5432/invoice_processor"
+    )
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"

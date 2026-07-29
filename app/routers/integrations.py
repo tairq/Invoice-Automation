@@ -1,4 +1,5 @@
 """Integration API routes — Xero OAuth PKCE flow (Desktop app) + tenant selection."""
+
 from __future__ import annotations
 
 import logging
@@ -119,7 +120,9 @@ async def xero_callback(
     if not _consume_oauth_state(body.state, body.organization_id, body.code_verifier):
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
-    org_uuid = uuid.UUID(body.organization_id) if body.organization_id != "default" else uuid.UUID(int=0)
+    org_uuid = (
+        uuid.UUID(body.organization_id) if body.organization_id != "default" else uuid.UUID(int=0)
+    )
     if not await exchange_code_for_tokens(db, org_uuid, body.code, body.code_verifier):
         raise HTTPException(status_code=502, detail="Failed to exchange Xero authorization code")
     return {"message": "Xero integration connected successfully"}
@@ -127,7 +130,9 @@ async def xero_callback(
 
 async def _get_credential(organization_id: str, db: AsyncSession) -> XeroCredential | None:
     org_uuid = uuid.UUID(organization_id) if organization_id != "default" else uuid.UUID(int=0)
-    result = await db.execute(select(XeroCredential).where(XeroCredential.organization_id == org_uuid))
+    result = await db.execute(
+        select(XeroCredential).where(XeroCredential.organization_id == org_uuid)
+    )
     return result.scalar_one_or_none()
 
 
@@ -158,7 +163,9 @@ async def xero_list_tenants(
         raise HTTPException(status_code=400, detail="Xero not connected")
     tenants = await resolve_tenants(credential.access_token)
     if not tenants:
-        raise HTTPException(status_code=502, detail="Failed to list Xero tenants — token may be expired")
+        raise HTTPException(
+            status_code=502, detail="Failed to list Xero tenants — token may be expired"
+        )
     return [
         XeroTenantInfo(
             tenant_id=t.get("tenantId", ""),
@@ -182,10 +189,14 @@ async def xero_select_tenant(
         raise HTTPException(status_code=400, detail="Xero not connected")
     tenants = await resolve_tenants(credential.access_token)
     if not tenants:
-        raise HTTPException(status_code=502, detail="Failed to list Xero tenants — token may be expired")
+        raise HTTPException(
+            status_code=502, detail="Failed to list Xero tenants — token may be expired"
+        )
     tenant = next((t for t in tenants if t.get("tenantId") == body.tenant_id), None)
     if not tenant:
-        raise HTTPException(status_code=404, detail="Requested tenant is not an authorised connection")
+        raise HTTPException(
+            status_code=404, detail="Requested tenant is not an authorised connection"
+        )
 
     credential.tenant_id = tenant["tenantId"]
     credential.tenant_name = tenant.get("tenantName")

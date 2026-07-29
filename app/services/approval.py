@@ -1,4 +1,5 @@
 """Approval workflow service — token generation, email sending, token redemption."""
+
 from __future__ import annotations
 
 import asyncio
@@ -69,7 +70,7 @@ def send_approval_email(
     body = f"""An invoice requires your approval.
 
 Invoice ID: {invoice_id}
-Vendor: {vendor_name or 'Unknown'}
+Vendor: {vendor_name or "Unknown"}
 Total: {total_str}
 
 Please review and take action:
@@ -91,12 +92,12 @@ def send_payment_reminder_email(
     recipient_email: str,
 ) -> None:
     """Send a payment reminder for an upcoming due date."""
-    subject = f"Payment Reminder — Invoice Due in 3 Days"
+    subject = "Payment Reminder — Invoice Due in 3 Days"
     amount_str = f"${amount_due:.2f}" if amount_due is not None else "N/A"
     body = f"""This is a payment reminder.
 
 Invoice ID: {invoice_id}
-Vendor: {vendor_name or 'Unknown'}
+Vendor: {vendor_name or "Unknown"}
 Amount Due: {amount_str}
 Due Date: {due_date}
 
@@ -142,9 +143,7 @@ async def redeem_approval_token(
     from app.models.invoice import ApprovalStatus, Invoice
     from app.models.processing_log import ProcessingLog
 
-    result = await db.execute(
-        select(ApprovalToken).where(ApprovalToken.token == token_str)
-    )
+    result = await db.execute(select(ApprovalToken).where(ApprovalToken.token == token_str))
     token = result.scalar_one_or_none()
 
     if not token:
@@ -162,9 +161,7 @@ async def redeem_approval_token(
     await db.flush()
 
     # Update invoice approval_status
-    inv_result = await db.execute(
-        select(Invoice).where(Invoice.id == token.invoice_id)
-    )
+    inv_result = await db.execute(select(Invoice).where(Invoice.id == token.invoice_id))
     invoice = inv_result.scalar_one_or_none()
     if invoice:
         if action == "approved":
@@ -196,16 +193,14 @@ def _fire_approval_webhook(invoice_id: str, action: str, invoice) -> None:
     """Fire webhook for approval events (fire-and-forget)."""
     try:
         import httpx
+        from sqlalchemy import select
 
         from app.database import async_session_factory
         from app.models.organization import Organization
-        from sqlalchemy import select
 
         async def _get_webhook_url():
             async with async_session_factory() as s:
-                result = await s.execute(
-                    select(Organization).where(Organization.id == "default")
-                )
+                result = await s.execute(select(Organization).where(Organization.id == "default"))
                 org = result.scalar_one_or_none()
                 return org.webhook_url if org else None
 

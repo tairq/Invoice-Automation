@@ -1,4 +1,5 @@
 """Airtable sync service — push invoice data to Airtable tables."""
+
 from __future__ import annotations
 
 import logging
@@ -29,7 +30,9 @@ def _fmt(val: Any) -> Any:
     return val
 
 
-def _build_invoice_record(invoice: dict, extracted_data: Optional[dict], line_items: list[dict]) -> dict:
+def _build_invoice_record(
+    invoice: dict, extracted_data: Optional[dict], line_items: list[dict]
+) -> dict:
     """Build a single Airtable record from invoice + extracted data."""
     ed = extracted_data or {}
     fields: dict[str, Any] = {
@@ -39,7 +42,6 @@ def _build_invoice_record(invoice: dict, extracted_data: Optional[dict], line_it
         "Source": invoice.get("source", ""),
         "Filename": invoice.get("original_filename", ""),
         "File Type": invoice.get("file_type", ""),
-
         # Vendor
         "Vendor Name": _fmt(ed.get("vendor_name")),
         "Vendor Address": _fmt(ed.get("vendor_address")),
@@ -49,12 +51,10 @@ def _build_invoice_record(invoice: dict, extracted_data: Optional[dict], line_it
         "Vendor Bank Name": _fmt(ed.get("vendor_bank_name")),
         "Vendor Bank IBAN": _fmt(ed.get("vendor_bank_iban")),
         "Vendor Bank SWIFT": _fmt(ed.get("vendor_bank_swift")),
-
         # Customer
         "Customer Name": _fmt(ed.get("customer_name")),
         "Customer Address": _fmt(ed.get("customer_address")),
         "Customer Tax ID": _fmt(ed.get("customer_tax_id")),
-
         # Invoice details
         "Invoice Number": _fmt(ed.get("invoice_number")),
         "Invoice Type": _fmt(ed.get("invoice_type")),
@@ -63,7 +63,6 @@ def _build_invoice_record(invoice: dict, extracted_data: Optional[dict], line_it
         "Currency": _fmt(ed.get("currency")),
         "PO Number": _fmt(ed.get("po_number")),
         "Payment Terms": _fmt(ed.get("payment_terms")),
-
         # Totals
         "Subtotal": _fmt(ed.get("subtotal")),
         "Tax Total": _fmt(ed.get("tax_total")),
@@ -71,7 +70,6 @@ def _build_invoice_record(invoice: dict, extracted_data: Optional[dict], line_it
         "Grand Total": _fmt(ed.get("grand_total")),
         "Amount Due": _fmt(ed.get("amount_due")),
         "Amount Paid": _fmt(ed.get("amount_paid")),
-
         # Processing
         "Confidence Score": _fmt(invoice.get("confidence_score")),
         "Needs Review": invoice.get("needs_review", False),
@@ -171,7 +169,11 @@ def _upsert_invoice_record(invoice_record: dict) -> Optional[dict]:
             )
             resp.raise_for_status()
             created = resp.json()
-            logger.info("Airtable: created invoice %s (record %s)", invoice_id, created["records"][0]["id"])
+            logger.info(
+                "Airtable: created invoice %s (record %s)",
+                invoice_id,
+                created["records"][0]["id"],
+            )
             return created
     except Exception as exc:
         logger.warning("Airtable write failed for invoice %s: %s", invoice_id, exc)
@@ -207,7 +209,7 @@ def _sync_line_items(invoice_id: str, line_items: list[dict]) -> None:
                 break
             # Delete in batches of 10 (Airtable max per request)
             for i in range(0, len(record_ids), 10):
-                batch = record_ids[i:i + 10]
+                batch = record_ids[i : i + 10]
                 resp = httpx.request(
                     "DELETE",
                     table_url,
@@ -227,7 +229,7 @@ def _sync_line_items(invoice_id: str, line_items: list[dict]) -> None:
         records = _build_line_item_records(invoice_id, line_items)
         # Airtable max 10 records per create request
         for i in range(0, len(records), 10):
-            batch = records[i:i + 10]
+            batch = records[i : i + 10]
             resp = httpx.post(
                 table_url,
                 headers=headers,

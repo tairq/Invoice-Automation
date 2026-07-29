@@ -4,13 +4,13 @@ Revision ID: 002
 Revises: 001
 Create Date: 2026-07-26 14:01:00.000000
 """
+
 from __future__ import annotations
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "002"
@@ -29,8 +29,18 @@ def upgrade() -> None:
         sa.Column("refresh_token", sa.Text(), nullable=False),
         sa.Column("token_expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("tenant_id", sa.String(255), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("organization_id"),
     )

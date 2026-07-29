@@ -1,4 +1,5 @@
 """Purchase Order model for PO matching."""
+
 from __future__ import annotations
 
 import uuid
@@ -22,12 +23,8 @@ class POStatus(str, PyEnum):
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
-    po_number: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    po_number: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     vendor_name: Mapped[str] = mapped_column(String(255), nullable=False)
     line_items: Mapped[Optional[dict]] = mapped_column(Text, nullable=True)  # JSON string
     total_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
@@ -36,9 +33,7 @@ class PurchaseOrder(Base):
         Enum(POStatus, name="po_status", create_constraint=True),
         default=POStatus.open,
     )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

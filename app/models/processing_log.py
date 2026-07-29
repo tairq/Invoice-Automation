@@ -1,4 +1,5 @@
 """Audit trail for each step of the processing pipeline."""
+
 from __future__ import annotations
 
 import uuid
@@ -17,9 +18,7 @@ if TYPE_CHECKING:
 class ProcessingLog(Base):
     __tablename__ = "processing_logs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("invoices.id"), nullable=False, index=True
     )
@@ -27,9 +26,7 @@ class ProcessingLog(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationship
     invoice: Mapped[Invoice] = relationship("Invoice", back_populates="processing_logs")

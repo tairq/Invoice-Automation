@@ -1,39 +1,40 @@
 """Process the downloaded invoice through the pipeline — clean run."""
+
 import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, date, timezone, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("invoice_processor")
 
 # Use the new DB file
 NEW_DB = "invoice_dev_new.db"
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///./{NEW_DB}"
 
-from app.database import engine, async_session_factory, Base
-engine.echo = False
+from app.database import Base, async_session_factory, engine
 
-from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus, PaymentStatus
-from app.models.processing_log import ProcessingLog
-from app.models.extracted_data import ExtractedData
-from app.models.line_item import LineItem
-from app.models.extraction_confidence import ExtractionConfidence
-from app.models.xero_credential import XeroCredential
-from app.models.organization import Organization
-from app.services.preprocessor import convert_to_images
-from app.services.extractor import extract_invoice_data
-from app.services.validator import validate_extraction
-from app.services.vendor_matching import match_vendor
-from app.services.po_matching import match_purchase_order
-from app.services.payment_terms import parse_payment_terms
-from app.core.storage import storage
+engine.echo = False
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from app.core.storage import storage
+from app.models.extracted_data import ExtractedData
+from app.models.extraction_confidence import ExtractionConfidence
+from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus, PaymentStatus
+from app.models.line_item import LineItem
+from app.models.organization import Organization
+from app.models.processing_log import ProcessingLog
+from app.models.xero_credential import XeroCredential
+from app.services.extractor import extract_invoice_data
+from app.services.payment_terms import parse_payment_terms
+from app.services.po_matching import match_purchase_order
+from app.services.preprocessor import convert_to_images
+from app.services.validator import validate_extraction
+from app.services.vendor_matching import match_vendor
 
 STORAGE_PATH = Path("./storage")
 ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
@@ -49,9 +50,7 @@ async def ensure_schema():
 async def ensure_default_org():
     """Create default organization if not exists."""
     async with async_session_factory() as session:
-        existing = await session.execute(
-            select(Organization).where(Organization.id == ORG_ID)
-        )
+        existing = await session.execute(select(Organization).where(Organization.id == ORG_ID))
         if not existing.scalar_one_or_none():
             session.add(Organization(id=ORG_ID, name="Default Organization"))
             await session.commit()
@@ -84,10 +83,14 @@ async def create_invoice_record():
 
 
 async def log_step(session, invoice_id, step, status, message):
-    session.add(ProcessingLog(
-        invoice_id=uuid.UUID(invoice_id),
-        step=step, status=status, message=message,
-    ))
+    session.add(
+        ProcessingLog(
+            invoice_id=uuid.UUID(invoice_id),
+            step=step,
+            status=status,
+            message=message,
+        )
+    )
     await session.flush()
 
 
@@ -95,10 +98,12 @@ async def run_pipeline(invoice_id):
     """Full processing pipeline."""
     async with async_session_factory() as session:
         result = await session.execute(
-            select(Invoice).options(
+            select(Invoice)
+            .options(
                 selectinload(Invoice.extracted_data),
                 selectinload(Invoice.line_items),
-            ).where(Invoice.id == uuid.UUID(invoice_id))
+            )
+            .where(Invoice.id == uuid.UUID(invoice_id))
         )
         invoice = result.scalar_one_or_none()
         if not invoice:
@@ -114,38 +119,65 @@ async def run_pipeline(invoice_id):
             logger.info("File size: %d bytes", len(file_bytes))
             images = convert_to_images(file_bytes, invoice.file_type)
             logger.info("Images: %d", len(images))
-            await log_step(session, invoice_id, "preprocessing", "success",
-                          "Converted to %d image(s)" % len(images))
+            await log_step(
+                session,
+                invoice_id,
+                "preprocessing",
+                "success",
+                "Converted to %d image(s)" % len(images),
+            )
 
             extraction = extract_invoice_data(images)
             ed = extraction["extracted_data"]
-            logger.info("Extraction: vendor=%s total=%s %s",
-                       ed.get("vendor_name"), ed.get("grand_total"), ed.get("currency"))
-            await log_step(session, invoice_id, "extraction", "success",
-                          "Extracted %d line items" % len(extraction.get("line_items", [])))
+            logger.info(
+                "Extraction: vendor=%s total=%s %s",
+                ed.get("vendor_name"),
+                ed.get("grand_total"),
+                ed.get("currency"),
+            )
+            await log_step(
+                session,
+                invoice_id,
+                "extraction",
+                "success",
+                "Extracted %d line items" % len(extraction.get("line_items", [])),
+            )
 
             validation = validate_extraction(ed, extraction["line_items"])
-            logger.info("Validation: confidence=%.4f needs_review=%s",
-                       validation["overall_confidence"], validation["needs_review"])
-            await log_step(session, invoice_id, "validation", "success",
-                          "Confidence: %.2f" % validation["overall_confidence"])
+            logger.info(
+                "Validation: confidence=%.4f needs_review=%s",
+                validation["overall_confidence"],
+                validation["needs_review"],
+            )
+            await log_step(
+                session,
+                invoice_id,
+                "validation",
+                "success",
+                "Confidence: %.2f" % validation["overall_confidence"],
+            )
 
             # Save to DB
             inv_uuid = uuid.UUID(invoice_id)
-            session.add(ExtractedData(
-                invoice_id=inv_uuid, **ed,
-                raw_extraction=extraction.get("raw_extraction"),
-            ))
+            session.add(
+                ExtractedData(
+                    invoice_id=inv_uuid,
+                    **ed,
+                    raw_extraction=extraction.get("raw_extraction"),
+                )
+            )
             for item_data in extraction["line_items"]:
                 session.add(LineItem(invoice_id=inv_uuid, **item_data))
             for conf_data in extraction.get("confidence_scores", []):
-                session.add(ExtractionConfidence(
-                    invoice_id=inv_uuid,
-                    field_name=conf_data.get("field_name", "unknown"),
-                    value=str(conf_data.get("value", "")),
-                    confidence=conf_data.get("confidence", 0.0),
-                    method=conf_data.get("method", "llm"),
-                ))
+                session.add(
+                    ExtractionConfidence(
+                        invoice_id=inv_uuid,
+                        field_name=conf_data.get("field_name", "unknown"),
+                        value=str(conf_data.get("value", "")),
+                        confidence=conf_data.get("confidence", 0.0),
+                        method=conf_data.get("method", "llm"),
+                    )
+                )
             await session.flush()
             await log_step(session, invoice_id, "save", "success", "Saved to DB")
 
@@ -165,7 +197,9 @@ async def run_pipeline(invoice_id):
             try:
                 ed_obj = invoice.extracted_data
                 if ed_obj and ed_obj.payment_terms:
-                    parsed = parse_payment_terms(ed_obj.payment_terms, ed_obj.issue_date or date.today())
+                    parsed = parse_payment_terms(
+                        ed_obj.payment_terms, ed_obj.issue_date or date.today()
+                    )
                     if parsed.get("due_date"):
                         invoice.due_date = date.fromisoformat(parsed["due_date"])
                     invoice.payment_status = PaymentStatus.unpaid
@@ -174,14 +208,19 @@ async def run_pipeline(invoice_id):
 
             # Finalize
             if invoice.status != InvoiceStatus.needs_review:
-                invoice.status = InvoiceStatus.needs_review if validation["needs_review"] else InvoiceStatus.done
+                invoice.status = (
+                    InvoiceStatus.needs_review if validation["needs_review"] else InvoiceStatus.done
+                )
             invoice.confidence_score = validation["overall_confidence"]
             invoice.needs_review = validation["needs_review"] or invoice.needs_review
             invoice.processed_at = datetime.utcnow()
 
             await log_step(session, invoice_id, "pipeline", "success", "Completed")
-            logger.info("Pipeline done: status=%s confidence=%.4f",
-                       invoice.status, validation["overall_confidence"])
+            logger.info(
+                "Pipeline done: status=%s confidence=%.4f",
+                invoice.status,
+                validation["overall_confidence"],
+            )
 
         except Exception as exc:
             invoice.status = InvoiceStatus.failed
@@ -201,16 +240,19 @@ async def push_xero_if_possible(invoice_id):
     """Try to push to Xero — expected to fail if no tokens."""
     async with async_session_factory() as session:
         result = await session.execute(
-            select(Invoice).options(
+            select(Invoice)
+            .options(
                 selectinload(Invoice.extracted_data),
                 selectinload(Invoice.line_items),
-            ).where(Invoice.id == uuid.UUID(invoice_id))
+            )
+            .where(Invoice.id == uuid.UUID(invoice_id))
         )
         invoice = result.scalar_one_or_none()
         if not invoice:
             return None
 
         from app.config import settings as cfg
+
         if not cfg.xero_enabled:
             logger.warning("Xero disabled in config")
             return None
@@ -225,6 +267,7 @@ async def push_xero_if_possible(invoice_id):
 
         logger.info("Pushing to Xero tenant: %s", credential.tenant_name)
         from app.services.xero_sync import push_invoice_to_xero
+
         xero_id = await push_invoice_to_xero(session, invoice)
         if xero_id:
             invoice.xero_invoice_id = xero_id
@@ -239,7 +282,10 @@ async def print_summary(invoice):
     print("\n" + "=" * 60)
     print("INVOICE SUMMARY")
     print("=" * 60)
-    print("Status:       %s" % (invoice.status.value if hasattr(invoice.status, 'value') else invoice.status))
+    print(
+        "Status:       %s"
+        % (invoice.status.value if hasattr(invoice.status, "value") else invoice.status)
+    )
     print("Vendor:       %s" % (ed.vendor_name if ed else "N/A"))
     print("Total:        %s %s" % (ed.grand_total if ed else "N/A", ed.currency if ed else ""))
     print("Invoice #:    %s" % (ed.invoice_number if ed else "N/A"))

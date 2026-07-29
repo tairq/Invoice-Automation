@@ -1,4 +1,5 @@
 """Fix extracted data and push invoice to Xero."""
+
 import asyncio
 import json
 import logging
@@ -18,23 +19,24 @@ async def fix_and_push():
     from datetime import datetime, timedelta, timezone
 
     from sqlalchemy import select, text
-
-    from app.config import settings
-    from app.database import async_session_factory
-    from app.models.xero_credential import XeroCredential
-    from app.services.xero_client import XeroClient
     from xero_python.accounting import (
         AccountingApi,
         Contact,
         CurrencyCode,
-        Invoice as SdkInvoice,
         Invoices,
         LineAmountTypes,
         LineItem,
     )
+    from xero_python.accounting import (
+        Invoice as SdkInvoice,
+    )
     from xero_python.api_client import ApiClient
     from xero_python.api_client.configuration import Configuration
     from xero_python.api_client.oauth2 import OAuth2Token
+
+    from app.config import settings
+    from app.database import async_session_factory
+    from app.models.xero_credential import XeroCredential
 
     async with async_session_factory() as db:
         # 1. Get the raw extraction JSON
@@ -72,9 +74,15 @@ async def fix_and_push():
                 WHERE invoice_id = :id
             """),
             {
-                "vn": vendor_name, "va": vendor_address, "ve": vendor_email,
-                "vt": vendor_tax_id, "cn": customer_name, "ca": customer_address,
-                "gt": grand_total, "ad": amount_due, "ap": amount_paid,
+                "vn": vendor_name,
+                "va": vendor_address,
+                "ve": vendor_email,
+                "vt": vendor_tax_id,
+                "cn": customer_name,
+                "ca": customer_address,
+                "gt": grand_total,
+                "ad": amount_due,
+                "ap": amount_paid,
                 "id": INVOICE_ID,
             },
         )
@@ -91,11 +99,15 @@ async def fix_and_push():
                 {"na": unit_price * qty, "ga": unit_price * qty, "id": INVOICE_ID},
             )
 
-        print(f"✅ Updated extracted data: vendor={vendor_name}, customer={customer_name}, total={grand_total} EUR")
+        print(
+            f"✅ Updated extracted data: vendor={vendor_name}, customer={customer_name}, total={grand_total} EUR"
+        )
 
         # 2. Update invoice status to 'done'
         await db.execute(
-            text("UPDATE invoices SET status = 'done', needs_review = 0, confidence_score = 0.95 WHERE id = :id"),
+            text(
+                "UPDATE invoices SET status = 'done', needs_review = 0, confidence_score = 0.95 WHERE id = :id"
+            ),
             {"id": INVOICE_ID},
         )
         await db.execute(
@@ -129,6 +141,7 @@ async def fix_and_push():
         # Manually refresh token (refresh_access_token has timezone-naive/aware issues with SQLite)
         print(f"⏳ Refreshing Xero token (was expiring at {credential.token_expires_at})...")
         import httpx
+
         refresh_data = {
             "grant_type": "refresh_token",
             "refresh_token": credential.refresh_token,
@@ -167,7 +180,9 @@ async def fix_and_push():
 
         # Xero org is USD-only — convert from EUR to USD using the exchange rate from the invoice
         usd_amount = 334.79
-        usd_subtotal = float(raw.get("line_items", [{}])[0].get("price_details", {}).get("local_amount", 334.79))
+        usd_subtotal = float(
+            raw.get("line_items", [{}])[0].get("price_details", {}).get("local_amount", 334.79)
+        )
 
         for li in sdk_line_items:
             li.unit_amount = usd_subtotal
@@ -200,7 +215,9 @@ async def fix_and_push():
         token_data = {
             "access_token": credential.access_token,
             "refresh_token": credential.refresh_token,
-            "expires_at": credential.token_expires_at.timestamp() if credential.token_expires_at else None,
+            "expires_at": credential.token_expires_at.timestamp()
+            if credential.token_expires_at
+            else None,
             "expires_in": 1800,
             "token_type": "Bearer",
             "scope": "offline_access accounting.invoices accounting.contacts",
@@ -247,7 +264,7 @@ async def fix_and_push():
                     {"id": INVOICE_ID, "xid": str(xero_id), "now": datetime.now(timezone.utc)},
                 )
                 await db.commit()
-                print(f"✅ Xero Invoice ID saved to database")
+                print("✅ Xero Invoice ID saved to database")
             else:
                 print("❌ Xero returned no invoices in response")
         except Exception as e:

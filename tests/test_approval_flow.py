@@ -1,11 +1,11 @@
 """Tests for the approval workflow — token generation, redemption, API endpoints."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
-from unittest.mock import ANY, patch
+from datetime import datetime
+from unittest.mock import patch
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,7 +85,8 @@ class TestApprovalTokenRedemption:
     """Test the redeem_approval_token service function."""
 
     async def _create_test_invoice_and_token(
-        self, db_session: AsyncSession,
+        self,
+        db_session: AsyncSession,
     ) -> tuple[uuid.UUID, str]:
         """Helper to create an invoice with an approval token."""
         from app.services.approval import create_approval_token
@@ -101,7 +102,9 @@ class TestApprovalTokenRedemption:
         await db_session.flush()
 
         token_str = await create_approval_token(
-            db_session, invoice.id, "approver@example.com",
+            db_session,
+            invoice.id,
+            "approver@example.com",
         )
         return invoice.id, token_str
 
@@ -126,9 +129,7 @@ class TestApprovalTokenRedemption:
         assert token.action == "approved"
 
         # Check invoice status updated
-        inv_q = await db_session.execute(
-            select(Invoice).where(Invoice.id == inv_id)
-        )
+        inv_q = await db_session.execute(select(Invoice).where(Invoice.id == inv_id))
         invoice = inv_q.scalar_one()
         assert invoice.approval_status == ApprovalStatus.approved
 
@@ -154,9 +155,7 @@ class TestApprovalTokenRedemption:
         assert result["success"] is True
         assert result["action"] == "rejected"
 
-        inv_q = await db_session.execute(
-            select(Invoice).where(Invoice.id == inv_id)
-        )
+        inv_q = await db_session.execute(select(Invoice).where(Invoice.id == inv_id))
         invoice = inv_q.scalar_one()
         assert invoice.approval_status == ApprovalStatus.rejected
 
@@ -165,7 +164,9 @@ class TestApprovalTokenRedemption:
         from app.services.approval import redeem_approval_token
 
         result = await redeem_approval_token(
-            db_session, "00000000000000000000000000000000", "approved",
+            db_session,
+            "00000000000000000000000000000000",
+            "approved",
         )
 
         assert result["success"] is False
@@ -191,7 +192,9 @@ class TestApprovalAPIEndpoints:
     """Test the /api/v1/approvals/{token}/approve and /reject endpoints."""
 
     async def _create_invoice_with_token(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ) -> tuple[str, str]:
         """Create an invoice + token and return (invoice_id, token_str)."""
         from app.services.approval import create_approval_token
@@ -207,12 +210,16 @@ class TestApprovalAPIEndpoints:
         await db_session.flush()
 
         token_str = await create_approval_token(
-            db_session, invoice.id, "approver@example.com",
+            db_session,
+            invoice.id,
+            "approver@example.com",
         )
         return str(invoice.id), token_str
 
     async def test_approve_endpoint(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ):
         """GET /api/v1/approvals/{token}/approve should approve the invoice."""
         inv_id, token_str = await self._create_invoice_with_token(db_session, client)
@@ -224,7 +231,9 @@ class TestApprovalAPIEndpoints:
         assert data["invoice_id"] == inv_id
 
     async def test_reject_endpoint(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ):
         """GET /api/v1/approvals/{token}/reject should reject the invoice."""
         inv_id, token_str = await self._create_invoice_with_token(db_session, client)
@@ -237,14 +246,16 @@ class TestApprovalAPIEndpoints:
 
     async def test_invalid_token_endpoint(self, client: AsyncClient):
         """An invalid token should return 400."""
-        resp = await client.get(
-            "/api/v1/approvals/00000000000000000000000000000000/approve"
-        )
+        resp = await client.get("/api/v1/approvals/00000000000000000000000000000000/approve")
         assert resp.status_code == 400
-        assert "error" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()
+        assert (
+            "error" in resp.json()["detail"].lower() or "invalid" in resp.json()["detail"].lower()
+        )
 
     async def test_double_use_endpoint(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ):
         """Using the same token twice should fail on second attempt."""
         _, token_str = await self._create_invoice_with_token(db_session, client)

@@ -1,13 +1,12 @@
 """Payment terms parsing service — parse human-readable payment terms into due dates."""
+
 from __future__ import annotations
 
 import json
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
-
-from app.core.llm_client import llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +113,8 @@ Return JSON with:
 
 Examples:
 - "Net 30" → {{"due_date": "2026-08-25", "early_payment_discount": null}}
-- "2/10 Net 30" → {{"due_date": "2026-09-14", "early_payment_discount": {{"discount_pct": 2, "discount_date": "2026-08-25"}}}}
+- "2/10 Net 30" → {{"due_date": "2026-09-14",
+   "early_payment_discount": {{"discount_pct": 2, "discount_date": "2026-08-25"}}}}
 - "Due on receipt" → {{"due_date": "2026-07-26", "early_payment_discount": null}}
 
 Return ONLY valid JSON, no other text."""
@@ -122,9 +122,9 @@ Return ONLY valid JSON, no other text."""
     try:
         # Use the LLM client's existing Anthropic/OpenAI infrastructure
         # but send a text-only prompt since there are no images
-        from app.config import settings
-
         import httpx
+
+        from app.config import settings
 
         if settings.llm_provider == "anthropic":
             headers = {
@@ -146,11 +146,7 @@ Return ONLY valid JSON, no other text."""
             )
             resp.raise_for_status()
             data = resp.json()
-            text_blocks = [
-                b["text"]
-                for b in data.get("content", [])
-                if b.get("type") == "text"
-            ]
+            text_blocks = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
             full_text = "\n".join(text_blocks)
         else:
             headers = {
@@ -161,7 +157,10 @@ Return ONLY valid JSON, no other text."""
                 "model": settings.openai_model,
                 "max_tokens": 1024,
                 "messages": [
-                    {"role": "system", "content": "You are a payment terms parser. Return only valid JSON."},
+                    {
+                        "role": "system",
+                        "content": "You are a payment terms parser. Return only valid JSON.",
+                    },
                     {"role": "user", "content": prompt},
                 ],
             }

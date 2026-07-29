@@ -1,4 +1,5 @@
 """Verify the invoice was updated in the database after Xero push."""
+
 import sqlite3
 
 conn = sqlite3.connect("invoice_dev.db")

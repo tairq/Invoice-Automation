@@ -4,6 +4,7 @@ Provides ``XeroClient`` which manages the SDK ``ApiClient`` lifecycle,
 handles token refresh, and exposes convenience methods for pushing
 invoices via the Xero Accounting API.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,11 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from xero_python.accounting import (
     AccountingApi,
     Contact,
-    Invoice as SdkInvoice,
+    CurrencyCode,
     Invoices,
     LineAmountTypes,
     LineItem,
-    CurrencyCode,
+)
+from xero_python.accounting import (
+    Invoice as SdkInvoice,
 )
 from xero_python.api_client import ApiClient
 from xero_python.api_client.configuration import Configuration
@@ -75,10 +78,7 @@ async def refresh_access_token(
     expires_at = credential.token_expires_at
     if expires_at is not None and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if (
-        expires_at is not None
-        and expires_at > now + timedelta(minutes=5)
-    ):
+    if expires_at is not None and expires_at > now + timedelta(minutes=5):
         return credential.access_token  # Still valid
 
     logger.info("Refreshing Xero token for org %s", credential.organization_id)
@@ -135,21 +135,25 @@ def build_invoice_model(
 
     sdk_line_items: list[LineItem] = []
     for item in line_items:
-        sdk_line_items.append(LineItem(
-            description=item.description or "",
-            quantity=float(item.quantity) if item.quantity else 1.0,
-            unit_amount=float(item.unit_price) if item.unit_price else 0.0,
-            tax_amount=float(item.tax_amount) if item.tax_amount else None,
-            account_code=sales_account_code,
-        ))
+        sdk_line_items.append(
+            LineItem(
+                description=item.description or "",
+                quantity=float(item.quantity) if item.quantity else 1.0,
+                unit_amount=float(item.unit_price) if item.unit_price else 0.0,
+                tax_amount=float(item.tax_amount) if item.tax_amount else None,
+                account_code=sales_account_code,
+            )
+        )
 
     # Xero requires at least one line item
     if not sdk_line_items:
-        sdk_line_items.append(LineItem(
-            description="Services",
-            quantity=1.0,
-            unit_amount=0.0,
-        ))
+        sdk_line_items.append(
+            LineItem(
+                description="Services",
+                quantity=1.0,
+                unit_amount=0.0,
+            )
+        )
 
     sdk_invoice = SdkInvoice(
         type="ACCREC",
@@ -234,13 +238,15 @@ class XeroClient:
             if self.credential.token_expires_at
             else None
         )
-        self._api_client.set_oauth2_token({
-            "access_token": self.credential.access_token,
-            "refresh_token": self.credential.refresh_token,
-            "expires_at": expires_at,
-            "expires_in": 1800,
-            "token_type": "Bearer",
-        })
+        self._api_client.set_oauth2_token(
+            {
+                "access_token": self.credential.access_token,
+                "refresh_token": self.credential.refresh_token,
+                "expires_at": expires_at,
+                "expires_in": 1800,
+                "token_type": "Bearer",
+            }
+        )
 
     # ── API accessors ──────────────────────────────────────────────
 
@@ -294,7 +300,9 @@ class XeroClient:
         except AccountingBadRequestException as exc:
             logger.error(
                 "Xero API error for invoice %s: %s — %s",
-                invoice.id, exc.reason, exc.body,
+                invoice.id,
+                exc.reason,
+                exc.body,
             )
             return None
         except Exception as exc:
@@ -306,7 +314,8 @@ class XeroClient:
             xero_id = created.invoices[0].invoice_id
             logger.info(
                 "Pushed invoice %s to Xero, got InvoiceID=%s",
-                invoice.id, xero_id,
+                invoice.id,
+                xero_id,
             )
             return xero_id
 

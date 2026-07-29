@@ -1,7 +1,7 @@
 """File storage abstraction — local filesystem or S3-compatible."""
+
 from __future__ import annotations
 
-import os
 import shutil
 from pathlib import Path
 from typing import BinaryIO, Optional
@@ -78,7 +78,7 @@ class S3Storage(BaseStorage):
     """S3-compatible storage."""
 
     def __init__(self) -> None:
-        import boto3  # noqa: auto-import
+        import boto3  # noqa
 
         self.client = boto3.client(
             "s3",

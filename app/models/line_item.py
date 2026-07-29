@@ -1,4 +1,5 @@
 """Line items extracted from an invoice."""
+
 from __future__ import annotations
 
 import uuid
@@ -18,9 +19,7 @@ if TYPE_CHECKING:
 class LineItem(Base):
     __tablename__ = "line_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("invoices.id"), nullable=False, index=True
     )
@@ -35,9 +34,7 @@ class LineItem(Base):
     net_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     gross_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
     item_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationship
     invoice: Mapped[Invoice] = relationship("Invoice", back_populates="line_items")

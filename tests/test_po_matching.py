@@ -1,22 +1,21 @@
 """Tests for PO / 3-way matching — purchase order CRUD, matching logic, discrepancy detection."""
+
 from __future__ import annotations
 
 import json
 import uuid
 from decimal import Decimal
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.models.extracted_data import ExtractedData
 from app.models.invoice import Invoice, InvoiceStatus, POMatchStatus
 from app.models.line_item import LineItem
 from app.models.po_match import POMatch
-from app.models.purchase_order import PurchaseOrder, POStatus
 from app.models.processing_log import ProcessingLog
+from app.models.purchase_order import POStatus, PurchaseOrder
 
 
 class TestPurchaseOrderAPI:
@@ -56,12 +55,20 @@ class TestPurchaseOrderAPI:
 
     async def test_list_pos(self, client: AsyncClient):
         """List all purchase orders."""
-        await client.post("/api/v1/purchase-orders", json={
-            "po_number": "PO-003", "vendor_name": "Gamma Ltd",
-        })
-        await client.post("/api/v1/purchase-orders", json={
-            "po_number": "PO-004", "vendor_name": "Delta Co",
-        })
+        await client.post(
+            "/api/v1/purchase-orders",
+            json={
+                "po_number": "PO-003",
+                "vendor_name": "Gamma Ltd",
+            },
+        )
+        await client.post(
+            "/api/v1/purchase-orders",
+            json={
+                "po_number": "PO-004",
+                "vendor_name": "Delta Co",
+            },
+        )
 
         resp = await client.get("/api/v1/purchase-orders")
         assert resp.status_code == 200
@@ -70,9 +77,13 @@ class TestPurchaseOrderAPI:
 
     async def test_get_po_by_id(self, client: AsyncClient):
         """Get a single purchase order by ID."""
-        create_resp = await client.post("/api/v1/purchase-orders", json={
-            "po_number": "PO-005", "vendor_name": "Epsilon LLC",
-        })
+        create_resp = await client.post(
+            "/api/v1/purchase-orders",
+            json={
+                "po_number": "PO-005",
+                "vendor_name": "Epsilon LLC",
+            },
+        )
         po_id = create_resp.json()["id"]
 
         resp = await client.get(f"/api/v1/purchase-orders/{po_id}")
@@ -81,9 +92,7 @@ class TestPurchaseOrderAPI:
 
     async def test_get_nonexistent_po(self, client: AsyncClient):
         """Getting a non-existent PO should return 404."""
-        resp = await client.get(
-            f"/api/v1/purchase-orders/{uuid.uuid4()}"
-        )
+        resp = await client.get(f"/api/v1/purchase-orders/{uuid.uuid4()}")
         assert resp.status_code == 404
 
 
@@ -91,7 +100,8 @@ class TestPOMatchingLogic:
     """Test the match_purchase_order service function directly."""
 
     async def _setup(
-        self, db_session: AsyncSession,
+        self,
+        db_session: AsyncSession,
         po_kwargs: dict | None = None,
         inv_kwargs: dict | None = None,
         ed_kwargs: dict | None = None,
@@ -138,7 +148,7 @@ class TestPOMatchingLogic:
         db_session.add(ed)
 
         # Create line items
-        for li_data in (line_items or []):
+        for li_data in line_items or []:
             li = LineItem(
                 invoice_id=invoice.id,
                 line_number=li_data.get("line_number", 1),
@@ -223,9 +233,7 @@ class TestPOMatchingLogic:
         assert result["matched"] is False
 
         # Check invoice POMatchStatus
-        inv_q = await db_session.execute(
-            select(Invoice).where(Invoice.id == uuid.UUID(inv_id))
-        )
+        inv_q = await db_session.execute(select(Invoice).where(Invoice.id == uuid.UUID(inv_id)))
         invoice = inv_q.scalar_one()
         assert invoice.po_match_status == POMatchStatus.unmatched
 
@@ -247,8 +255,13 @@ class TestPOMatchingLogic:
                 "vendor_name": "Acme Corp",
             },
             line_items=[
-                {"description": "Widget A", "quantity": 15, "unit_price": 25.0,
-                 "net_amount": 375.0, "gross_amount": 375.0},
+                {
+                    "description": "Widget A",
+                    "quantity": 15,
+                    "unit_price": 25.0,
+                    "net_amount": 375.0,
+                    "gross_amount": 375.0,
+                },
             ],
         )
 
@@ -259,9 +272,7 @@ class TestPOMatchingLogic:
         assert len(result["discrepancies"]) > 0
 
         # Invoice should be in needs_review
-        inv_q = await db_session.execute(
-            select(Invoice).where(Invoice.id == uuid.UUID(inv_id))
-        )
+        inv_q = await db_session.execute(select(Invoice).where(Invoice.id == uuid.UUID(inv_id)))
         invoice = inv_q.scalar_one()
         assert invoice.status == InvoiceStatus.needs_review
 
@@ -284,10 +295,20 @@ class TestPOMatchingLogic:
                 "vendor_name": "Acme Corp",
             },
             line_items=[
-                {"description": "Widget A", "quantity": 10, "unit_price": 25.0,
-                 "net_amount": 250.0, "gross_amount": 250.0},
-                {"description": "Widget B", "quantity": 5, "unit_price": 50.0,
-                 "net_amount": 250.0, "gross_amount": 250.0},
+                {
+                    "description": "Widget A",
+                    "quantity": 10,
+                    "unit_price": 25.0,
+                    "net_amount": 250.0,
+                    "gross_amount": 250.0,
+                },
+                {
+                    "description": "Widget B",
+                    "quantity": 5,
+                    "unit_price": 50.0,
+                    "net_amount": 250.0,
+                    "gross_amount": 250.0,
+                },
             ],
         )
 
@@ -328,9 +349,7 @@ class TestPOMatchingLogic:
 
         # Check POMatch record exists
         inv_uuid = uuid.UUID(inv_id)
-        po_q = await db_session.execute(
-            select(POMatch).where(POMatch.invoice_id == inv_uuid)
-        )
+        po_q = await db_session.execute(select(POMatch).where(POMatch.invoice_id == inv_uuid))
         po_match = po_q.scalar_one_or_none()
         assert po_match is not None
         assert po_match.match_confidence >= 0.95
@@ -360,8 +379,7 @@ class TestPOCompareLineItems:
                     setattr(self, k, v)
 
         mock_inv_items = [
-            MockItem(**item) if isinstance(item, dict) else item
-            for item in inv_items
+            MockItem(**item) if isinstance(item, dict) else item for item in inv_items
         ]
 
         return _compare_line_items(mock_inv_items, po_items)
@@ -440,18 +458,26 @@ class TestInvoiceFiltersForMatching:
     """Test that the list endpoint supports the new PO/payment filters."""
 
     async def test_filter_by_po_match_status(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ):
         """The /api/v1/invoices endpoint should support po_match_status filter."""
         # Create invoices with different PO match statuses
         inv_matched = Invoice(
-            status=InvoiceStatus.done, file_path="a.pdf",
-            original_filename="a.pdf", file_type="pdf", file_size=100,
+            status=InvoiceStatus.done,
+            file_path="a.pdf",
+            original_filename="a.pdf",
+            file_type="pdf",
+            file_size=100,
             po_match_status=POMatchStatus.matched,
         )
         inv_unmatched = Invoice(
-            status=InvoiceStatus.done, file_path="b.pdf",
-            original_filename="b.pdf", file_type="pdf", file_size=100,
+            status=InvoiceStatus.done,
+            file_path="b.pdf",
+            original_filename="b.pdf",
+            file_type="pdf",
+            file_size=100,
             po_match_status=POMatchStatus.unmatched,
         )
         db_session.add_all([inv_matched, inv_unmatched])
@@ -462,25 +488,30 @@ class TestInvoiceFiltersForMatching:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] >= 1
-        assert any(
-            item.get("id") == str(inv_matched.id)
-            for item in data["items"]
-        )
+        assert any(item.get("id") == str(inv_matched.id) for item in data["items"])
 
     async def test_filter_by_payment_status(
-        self, db_session: AsyncSession, client: AsyncClient,
+        self,
+        db_session: AsyncSession,
+        client: AsyncClient,
     ):
         """The /api/v1/invoices endpoint should support payment_status filter."""
         from app.models.invoice import PaymentStatus
 
         inv_overdue = Invoice(
-            status=InvoiceStatus.done, file_path="c.pdf",
-            original_filename="c.pdf", file_type="pdf", file_size=100,
+            status=InvoiceStatus.done,
+            file_path="c.pdf",
+            original_filename="c.pdf",
+            file_type="pdf",
+            file_size=100,
             payment_status=PaymentStatus.overdue,
         )
         inv_paid = Invoice(
-            status=InvoiceStatus.done, file_path="d.pdf",
-            original_filename="d.pdf", file_type="pdf", file_size=100,
+            status=InvoiceStatus.done,
+            file_path="d.pdf",
+            original_filename="d.pdf",
+            file_type="pdf",
+            file_size=100,
             payment_status=PaymentStatus.paid,
         )
         db_session.add_all([inv_overdue, inv_paid])

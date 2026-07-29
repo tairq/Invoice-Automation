@@ -1,18 +1,21 @@
 """Push the Keepa invoice to Xero SAIW tenant."""
+
 import asyncio
 import logging
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from xero_python.accounting import (
     AccountingApi,
     Contact,
-    Invoice as SdkInvoice,
     Invoices,
     LineAmountTypes,
     LineItem,
+)
+from xero_python.accounting import (
+    Invoice as SdkInvoice,
 )
 from xero_python.api_client import ApiClient
 from xero_python.api_client.configuration import Configuration
@@ -102,9 +105,7 @@ async def main():
         default_org_id = UUID(int=0)
         db_org_id = default_org_id.hex
         cred_result = await session.execute(
-            text(
-                "SELECT * FROM xero_credentials WHERE organization_id = :org_id"
-            ),
+            text("SELECT * FROM xero_credentials WHERE organization_id = :org_id"),
             {"org_id": db_org_id},
         )
         cred_row = cred_result.one_or_none()
@@ -147,9 +148,7 @@ async def main():
             li_item = LineItem(
                 description=li[li_cols.index("description")] or "",
                 quantity=float(li[li_cols.index("quantity")] or 1.0),
-                unit_amount=float(
-                    li[li_cols.index("unit_price")] or 0.0
-                ),
+                unit_amount=float(li[li_cols.index("unit_price")] or 0.0),
                 tax_amount=(
                     float(li[li_cols.index("tax_amount")])
                     if li[li_cols.index("tax_amount")]
@@ -160,9 +159,7 @@ async def main():
             line_items.append(li_item)
 
         if not line_items:
-            line_items.append(
-                LineItem(description="Services", quantity=1.0, unit_amount=0.0)
-            )
+            line_items.append(LineItem(description="Services", quantity=1.0, unit_amount=0.0))
 
         # Parse dates to datetime.date objects (SDK v15 requirement)
         sdk_issue_date = parse_date(ed.get("issue_date"))
@@ -174,6 +171,7 @@ async def main():
         # Xero requires a DueDate for AUTHORISED invoices
         if sdk_due_date is None and sdk_issue_date:
             from datetime import timedelta
+
             sdk_due_date = sdk_issue_date + timedelta(days=30)
             print(f"  Set DueDate: {sdk_due_date} (30 days from issue)")
 
@@ -188,9 +186,7 @@ async def main():
             # Don't set currency_code — let Xero use the org's default
             status="AUTHORISED",
             sub_total=subtotal,
-            total_tax=(
-                float(ed["tax_total"]) if ed.get("tax_total") else None
-            ),
+            total_tax=(float(ed["tax_total"]) if ed.get("tax_total") else None),
             total=grand_total,
         )
 
@@ -210,11 +206,7 @@ async def main():
             pass
 
         # Set token data
-        expires_at = (
-            cred.token_expires_at.timestamp()
-            if cred.token_expires_at
-            else None
-        )
+        expires_at = cred.token_expires_at.timestamp() if cred.token_expires_at else None
         token_data = {
             "access_token": cred.access_token,
             "refresh_token": cred.refresh_token,
@@ -232,10 +224,7 @@ async def main():
 
         accounting = AccountingApi(api_client)
 
-        print(
-            f"Pushing to Xero tenant: {cred.tenant_name} "
-            f"({cred.tenant_id})..."
-        )
+        print(f"Pushing to Xero tenant: {cred.tenant_name} ({cred.tenant_id})...")
 
         created = accounting.create_invoices(
             xero_tenant_id=cred.tenant_id,
@@ -248,10 +237,7 @@ async def main():
 
             # Update invoice in DB
             await session.execute(
-                text(
-                    "UPDATE invoices SET xero_invoice_id = :xero_id "
-                    "WHERE id = :inv_id"
-                ),
+                text("UPDATE invoices SET xero_invoice_id = :xero_id WHERE id = :inv_id"),
                 {"xero_id": xero_id, "inv_id": inv_id},
             )
 
@@ -273,10 +259,7 @@ async def main():
             # Set organization_id if null so future syncs work too
             if org_id is None:
                 await session.execute(
-                    text(
-                        "UPDATE invoices SET organization_id = :org_id "
-                        "WHERE id = :inv_id"
-                    ),
+                    text("UPDATE invoices SET organization_id = :org_id WHERE id = :inv_id"),
                     {"org_id": db_org_id, "inv_id": inv_id},
                 )
                 print("Updated invoice organization_id to match Xero credential")

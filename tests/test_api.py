@@ -1,4 +1,5 @@
 """Tests for the FastAPI invoice routes."""
+
 from __future__ import annotations
 
 from httpx import AsyncClient

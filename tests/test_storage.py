@@ -1,4 +1,5 @@
 """Tests for storage backends."""
+
 from __future__ import annotations
 
 from app.core.storage import LocalStorage

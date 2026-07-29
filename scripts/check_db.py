@@ -1,5 +1,6 @@
 """Check and recreate backup from the existing database."""
-import sqlite3, json
+
+import sqlite3
 
 # Try the original DB file
 for db_name in ["invoice_dev.db", "invoice_dev_new.db", "invoice_dev_locked.db"]:

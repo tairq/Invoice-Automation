@@ -1,7 +1,8 @@
 """Tests for the preprocessing service."""
+
 from __future__ import annotations
 
-from app.services.preprocessor import convert_to_images, pdf_to_images
+from app.services.preprocessor import convert_to_images
 
 
 class TestConvertToImages:

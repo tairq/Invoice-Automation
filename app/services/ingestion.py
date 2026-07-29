@@ -1,10 +1,9 @@
 """Ingestion service — file validation, dedup, and queue routing."""
+
 from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import select
@@ -25,7 +24,10 @@ def validate_file(filename: str, content: bytes) -> str:
 
     if ext not in settings.allowed_extensions_list:
         raise IngestionError(
-            f"File type '.{ext}' not allowed. Allowed: {', '.join(settings.allowed_extensions_list)}"
+            (
+                f"File type '.{ext}' not allowed. "
+                f"Allowed: {', '.join(settings.allowed_extensions_list)}"
+            )
         )
 
     if len(content) > settings.max_file_size_bytes:
@@ -44,9 +46,7 @@ async def check_duplicate(
 
     # Simple check: same hash in filename (we store hash in metadata)
     # More advanced: check invoice_number + vendor_name after extraction
-    result = await db.execute(
-        select(Invoice).where(Invoice.file_path.contains(content_hash[:16]))
-    )
+    result = await db.execute(select(Invoice).where(Invoice.file_path.contains(content_hash[:16])))
     return result.scalar_one_or_none() is not None
 
 

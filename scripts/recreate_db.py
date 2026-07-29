@@ -1,17 +1,19 @@
 """Recreate the SQLite database with current model schemas and restore data."""
+
 import asyncio
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./invoice_dev.db"
 
-from app.database import engine, async_session_factory, init_db
+from sqlalchemy import text as sa_text
+
+from app.database import async_session_factory, engine, init_db
 from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus
 from app.models.organization import Organization
 from app.models.xero_credential import XeroCredential
-from sqlalchemy import text as sa_text
 
 
 async def recreate_db():
@@ -57,14 +59,18 @@ async def recreate_db():
         for inv_data in backup["invoices"]:
             obj = Invoice(
                 id=uuid.UUID(inv_data["id"]),
-                organization_id=uuid.UUID(inv_data["organization_id"]) if inv_data.get("organization_id") else None,
+                organization_id=uuid.UUID(inv_data["organization_id"])
+                if inv_data.get("organization_id")
+                else None,
                 status=InvoiceStatus.done,
                 source=InvoiceSource.email,
                 file_path=inv_data["file_path"],
                 original_filename=inv_data["original_filename"],
                 file_type=inv_data["file_type"],
                 file_size=int(inv_data["file_size"]),
-                confidence_score=float(inv_data["confidence_score"]) if inv_data.get("confidence_score") else None,
+                confidence_score=float(inv_data["confidence_score"])
+                if inv_data.get("confidence_score")
+                else None,
                 xero_invoice_id=inv_data["xero_invoice_id"],
             )
             session.add(obj)
@@ -75,12 +81,19 @@ async def recreate_db():
 
     # Verify
     async with async_session_factory() as session:
-        from sqlalchemy import select
         orgs = (await session.execute(sa_text("SELECT id, name FROM organizations"))).all()
-        creds = (await session.execute(sa_text("SELECT id, tenant_name, tenant_id FROM xero_credentials"))).all()
-        invs = (await session.execute(sa_text("SELECT id, original_filename, xero_invoice_id FROM invoices"))).all()
+        creds = (
+            await session.execute(
+                sa_text("SELECT id, tenant_name, tenant_id FROM xero_credentials")
+            )
+        ).all()
+        invs = (
+            await session.execute(
+                sa_text("SELECT id, original_filename, xero_invoice_id FROM invoices")
+            )
+        ).all()
 
-        print(f"\nVerification:")
+        print("\nVerification:")
         print(f"  Organizations: {len(orgs)}")
         print(f"  Xero Credentials: {len(creds)}")
         print(f"  Invoices: {len(invs)}")

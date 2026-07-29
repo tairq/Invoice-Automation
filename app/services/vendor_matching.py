@@ -1,16 +1,14 @@
 """Vendor master matching service — match extracted vendor names against the vendor master list."""
+
 from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
 
 from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +20,6 @@ async def match_vendor(invoice_id: str, db: AsyncSession | None = None) -> dict:
 
     Returns a dict with match result information.
     """
-    from app.models.extracted_data import ExtractedData
     from app.models.invoice import Invoice
     from app.models.processing_log import ProcessingLog
     from app.models.vendor import Vendor
@@ -76,6 +73,7 @@ async def match_vendor(invoice_id: str, db: AsyncSession | None = None) -> dict:
                 if isinstance(vendor.aliases, str):
                     try:
                         import json
+
                         aliases = json.loads(vendor.aliases)
                     except (json.JSONDecodeError, TypeError):
                         aliases = []
@@ -102,7 +100,10 @@ async def match_vendor(invoice_id: str, db: AsyncSession | None = None) -> dict:
             ed.vendor_id = best_vendor.id
             ed.vendor_verified = True
 
-            log_msg = f"Matched vendor '{ed.vendor_name}' → {best_vendor.canonical_name} (confidence: {best_score:.0f}%)"
+            log_msg = (
+                f"Matched vendor '{ed.vendor_name}' → {best_vendor.canonical_name} "
+                f"(confidence: {best_score:.0f}%)"
+            )
             logger.info("Invoice %s: %s", invoice_id, log_msg)
 
             log = ProcessingLog(

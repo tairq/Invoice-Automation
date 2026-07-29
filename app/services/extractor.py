@@ -1,14 +1,13 @@
 """AI-powered extraction service — the core intelligence."""
+
 from __future__ import annotations
 
 import json
 import logging
-import time
+from datetime import date
 from typing import Any, Optional
 
 from app.core.llm_client import llm_client
-from app.models.extracted_data import ExtractedData
-from app.models.line_item import LineItem
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +71,7 @@ def extract_invoice_data(image_bytes_list: list[bytes]) -> dict[str, Any]:
 
     Returns a dict with extracted_data, line_items, and confidence_scores.
     """
-    logger.info(
-        "Extracting invoice data from %d image(s)...", len(image_bytes_list)
-    )
+    logger.info("Extracting invoice data from %d image(s)...", len(image_bytes_list))
 
     raw = llm_client.extract(image_bytes_list)
 
@@ -136,19 +133,21 @@ def _extract_line_items(raw: dict) -> list[dict]:
     for i, item in enumerate(items):
         if not isinstance(item, dict):
             continue
-        result.append({
-            "line_number": i + 1,
-            "description": item.get("description"),
-            "quantity": _safe_decimal(item.get("quantity")),
-            "unit": item.get("unit"),
-            "unit_price": _safe_decimal(item.get("unit_price")),
-            "tax_rate": _safe_decimal(item.get("tax_rate")),
-            "tax_amount": _safe_decimal(item.get("tax_amount")),
-            "discount_amount": _safe_decimal(item.get("discount_amount")),
-            "net_amount": _safe_decimal(item.get("net_amount")),
-            "gross_amount": _safe_decimal(item.get("gross_amount")),
-            "item_code": item.get("item_code"),
-        })
+        result.append(
+            {
+                "line_number": i + 1,
+                "description": item.get("description"),
+                "quantity": _safe_decimal(item.get("quantity")),
+                "unit": item.get("unit"),
+                "unit_price": _safe_decimal(item.get("unit_price")),
+                "tax_rate": _safe_decimal(item.get("tax_rate")),
+                "tax_amount": _safe_decimal(item.get("tax_amount")),
+                "discount_amount": _safe_decimal(item.get("discount_amount")),
+                "net_amount": _safe_decimal(item.get("net_amount")),
+                "gross_amount": _safe_decimal(item.get("gross_amount")),
+                "item_code": item.get("item_code"),
+            }
+        )
     return result
 
 

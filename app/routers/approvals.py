@@ -1,22 +1,22 @@
 """Approval workflow API routes — token-based approve/reject."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_api_key
 from app.database import get_session
 
-
 # ─── Schemas ───────────────────────────────────────────────────────
+
 
 class PurchaseOrderCreate(BaseModel):
     po_number: str
@@ -96,8 +96,6 @@ vendors_router = APIRouter(
 # Approval Endpoints (no auth required — token IS the auth)
 # ==============================
 
-from fastapi.responses import RedirectResponse
-
 
 @approvals_router.get("/{token}/approve")
 async def approve_invoice(
@@ -144,7 +142,7 @@ async def create_purchase_order(
     db: AsyncSession = Depends(get_session),
 ) -> PurchaseOrderResponse:
     """Create a new purchase order."""
-    from app.models.purchase_order import PurchaseOrder, POStatus
+    from app.models.purchase_order import POStatus, PurchaseOrder
 
     # Check for duplicate PO number
     existing = await db.execute(
@@ -195,9 +193,7 @@ async def get_purchase_order(
     """Get a purchase order by ID."""
     from app.models.purchase_order import PurchaseOrder
 
-    result = await db.execute(
-        select(PurchaseOrder).where(PurchaseOrder.id == po_id)
-    )
+    result = await db.execute(select(PurchaseOrder).where(PurchaseOrder.id == po_id))
     po = result.scalar_one_or_none()
     if not po:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -222,7 +218,10 @@ async def create_vendor(
         select(Vendor).where(Vendor.canonical_name == vendor_data.canonical_name)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Vendor '{vendor_data.canonical_name}' already exists")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Vendor '{vendor_data.canonical_name}' already exists",
+        )
 
     import json
 
@@ -246,9 +245,7 @@ async def list_vendors(
     """List all vendors."""
     from app.models.vendor import Vendor
 
-    result = await db.execute(
-        select(Vendor).order_by(Vendor.canonical_name.asc())
-    )
+    result = await db.execute(select(Vendor).order_by(Vendor.canonical_name.asc()))
     vendors = result.scalars().all()
     return [VendorResponse.model_validate(v) for v in vendors]
 
@@ -261,9 +258,7 @@ async def get_vendor(
     """Get a vendor by ID."""
     from app.models.vendor import Vendor
 
-    result = await db.execute(
-        select(Vendor).where(Vendor.id == vendor_id)
-    )
+    result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
     vendor = result.scalar_one_or_none()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
@@ -279,9 +274,7 @@ async def update_vendor(
     """Update a vendor record."""
     from app.models.vendor import Vendor
 
-    result = await db.execute(
-        select(Vendor).where(Vendor.id == vendor_id)
-    )
+    result = await db.execute(select(Vendor).where(Vendor.id == vendor_id))
     vendor = result.scalar_one_or_none()
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")

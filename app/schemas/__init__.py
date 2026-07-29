@@ -1,4 +1,5 @@
 """Pydantic schemas for API request/response validation."""
+
 from __future__ import annotations
 
 import uuid
@@ -8,8 +9,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
-
 # ─── Line Items ───────────────────────────────────────────────────
+
 
 class LineItemResponse(BaseModel):
     id: uuid.UUID
@@ -29,6 +30,7 @@ class LineItemResponse(BaseModel):
 
 
 # ─── Extracted Data ───────────────────────────────────────────────
+
 
 class ExtractedDataResponse(BaseModel):
     id: uuid.UUID
@@ -70,6 +72,7 @@ class ExtractedDataResponse(BaseModel):
 
 
 # ─── Invoice ──────────────────────────────────────────────────────
+
 
 class InvoiceResponse(BaseModel):
     id: uuid.UUID
@@ -121,6 +124,7 @@ class PaginatedResponse(BaseModel):
 
 # ─── Upload ───────────────────────────────────────────────────────
 
+
 class UploadResponse(BaseModel):
     id: uuid.UUID
     filename: str
@@ -129,6 +133,7 @@ class UploadResponse(BaseModel):
 
 
 # ─── Review ───────────────────────────────────────────────────────
+
 
 class FieldCorrection(BaseModel):
     field_name: str = Field(..., description="Name of the field being corrected")
@@ -147,6 +152,7 @@ class ReviewResponse(BaseModel):
 
 
 # ─── Stats ────────────────────────────────────────────────────────
+
 
 class MonthlySpend(BaseModel):
     month: str  # "2025-01"
@@ -179,6 +185,7 @@ class DashboardStats(BaseModel):
 
 # ─── Webhook Delivery ─────────────────────────────────────────────
 
+
 class WebhookDeliveryResponse(BaseModel):
     id: uuid.UUID
     organization_id: Optional[uuid.UUID] = None
@@ -199,6 +206,7 @@ class WebhookDeliveryResponse(BaseModel):
 
 # ─── n8n ──────────────────────────────────────────────────────────
 
+
 class N8nTriggerResponse(BaseModel):
     success: bool
     status_code: int
@@ -206,6 +214,7 @@ class N8nTriggerResponse(BaseModel):
 
 
 # ─── Export ───────────────────────────────────────────────────────
+
 
 class ExportRequest(BaseModel):
     invoice_ids: Optional[list[uuid.UUID]] = None
@@ -215,6 +224,7 @@ class ExportRequest(BaseModel):
 
 
 # ─── Email Config ─────────────────────────────────────────────────
+
 
 class EmailConfigRequest(BaseModel):
     host: str
@@ -236,6 +246,7 @@ class EmailConfigResponse(BaseModel):
 
 # ─── Webhook ──────────────────────────────────────────────────────
 
+
 class WebhookConfigRequest(BaseModel):
     url: str
     events: list[str] = ["invoice.processed", "invoice.failed"]
@@ -243,6 +254,7 @@ class WebhookConfigRequest(BaseModel):
 
 
 # ─── Processing Log ───────────────────────────────────────────────
+
 
 class ProcessingLogResponse(BaseModel):
     id: uuid.UUID

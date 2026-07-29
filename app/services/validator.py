@@ -1,4 +1,5 @@
 """Validation service — cross-field checks, confidence scoring, duplicate detection."""
+
 from __future__ import annotations
 
 import logging
@@ -72,8 +73,7 @@ def validate_extraction(data: dict, line_items: list[dict]) -> dict[str, Any]:
     # 4. Line item validation
     if line_items:
         items_total = sum(
-            _to_decimal(item.get("net_amount", 0)) or Decimal("0")
-            for item in line_items
+            _to_decimal(item.get("net_amount", 0)) or Decimal("0") for item in line_items
         )
         if subtotal is not None and items_total > 0:
             diff = abs(subtotal - items_total)
@@ -92,8 +92,6 @@ def validate_extraction(data: dict, line_items: list[dict]) -> dict[str, Any]:
     # 5. Date validation
     if data.get("issue_date") and data.get("due_date"):
         try:
-            from datetime import date
-
             issue = data["issue_date"]
             due = data["due_date"]
             if isinstance(issue, str):

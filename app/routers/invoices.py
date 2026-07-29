@@ -1,11 +1,12 @@
 """Invoice management API routes."""
+
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,11 +16,9 @@ from app.database import get_session
 from app.models.extracted_data import ExtractedData
 from app.models.extraction_confidence import ExtractionConfidence
 from app.models.invoice import Invoice, InvoiceSource, InvoiceStatus
-from app.models.line_item import LineItem
 from app.models.processing_log import ProcessingLog
 from app.schemas import (
     DashboardStats,
-    FieldCorrection,
     InvoiceListResponse,
     InvoiceResponse,
     PaginatedResponse,
@@ -156,21 +155,23 @@ async def list_invoices(
     items = []
     for inv in invoices:
         ed = inv.extracted_data
-        items.append(InvoiceListResponse(
-            id=inv.id,
-            status=inv.status.value if hasattr(inv.status, "value") else inv.status,
-            source=inv.source.value if hasattr(inv.source, "value") else inv.source,
-            original_filename=inv.original_filename,
-            file_type=inv.file_type,
-            confidence_score=inv.confidence_score,
-            needs_review=inv.needs_review,
-            is_duplicate=inv.is_duplicate,
-            vendor_name=ed.vendor_name if ed else None,
-            invoice_number=ed.invoice_number if ed else None,
-            grand_total=ed.grand_total if ed else None,
-            currency=ed.currency if ed else None,
-            created_at=inv.created_at,
-        ))
+        items.append(
+            InvoiceListResponse(
+                id=inv.id,
+                status=inv.status.value if hasattr(inv.status, "value") else inv.status,
+                source=inv.source.value if hasattr(inv.source, "value") else inv.source,
+                original_filename=inv.original_filename,
+                file_type=inv.file_type,
+                confidence_score=inv.confidence_score,
+                needs_review=inv.needs_review,
+                is_duplicate=inv.is_duplicate,
+                vendor_name=ed.vendor_name if ed else None,
+                invoice_number=ed.invoice_number if ed else None,
+                grand_total=ed.grand_total if ed else None,
+                currency=ed.currency if ed else None,
+                created_at=inv.created_at,
+            )
+        )
 
     return PaginatedResponse(
         items=[item.model_dump() for item in items],
@@ -191,34 +192,32 @@ async def get_dashboard_stats(
     top vendors, monthly breakdown).
     """
     from datetime import date, timedelta
-    import math
 
     # Total counts by status
-    status_q = (
-        select(Invoice.status, func.count().label("count"))
-        .group_by(Invoice.status)
-    )
+    status_q = select(Invoice.status, func.count().label("count")).group_by(Invoice.status)
     result = await db.execute(status_q)
-    status_counts = {row.status.value if hasattr(row.status, "value") else row.status: row.count for row in result}
+    status_counts = {
+        row.status.value if hasattr(row.status, "value") else row.status: row.count
+        for row in result
+    }
 
     # Total invoices
     total_q = select(func.count()).select_from(Invoice)
     total = (await db.execute(total_q)).scalar() or 0
 
     # Processed today
-    today_q = select(func.count()).select_from(Invoice).where(
-        func.date(Invoice.created_at) == func.current_date()
+    today_q = (
+        select(func.count())
+        .select_from(Invoice)
+        .where(func.date(Invoice.created_at) == func.current_date())
     )
     today = (await db.execute(today_q)).scalar() or 0
 
     # Average confidence
-    conf_q = select(func.avg(Invoice.confidence_score)).where(
-        Invoice.confidence_score.isnot(None)
-    )
+    conf_q = select(func.avg(Invoice.confidence_score)).where(Invoice.confidence_score.isnot(None))
     avg_conf = (await db.execute(conf_q)).scalar() or 0.0
 
     # Total amount
-    from sqlalchemy import outerjoin
     amt_q = select(func.sum(ExtractedData.grand_total))
     total_amt = (await db.execute(amt_q)).scalar() or 0
 
@@ -231,9 +230,7 @@ async def get_dashboard_stats(
     )
     vendor_result = await db.execute(vendor_count_q)
     top_vendors_by_count = [
-        {"name": row.vendor_name, "count": row.count}
-        for row in vendor_result
-        if row.vendor_name
+        {"name": row.vendor_name, "count": row.count} for row in vendor_result if row.vendor_name
     ]
 
     # ── Enhanced Analytics ──────────────────────────────────────
@@ -249,16 +246,12 @@ async def get_dashboard_stats(
     )
     currency_result = await db.execute(currency_q)
     total_amount_by_currency = {
-        row.currency: float(row.total)
-        for row in currency_result
-        if row.currency and row.total
+        row.currency: float(row.total) for row in currency_result if row.currency and row.total
     }
 
     # 2. Average processing time (seconds)
     time_q = select(
-        func.avg(
-            func.extract("epoch", Invoice.processed_at - Invoice.created_at)
-        )
+        func.avg(func.extract("epoch", Invoice.processed_at - Invoice.created_at))
     ).where(
         Invoice.processed_at.isnot(None),
         Invoice.status.in_(["done", "needs_review"]),
@@ -302,9 +295,7 @@ async def get_dashboard_stats(
             func.sum(ExtractedData.grand_total).label("total"),
             func.count().label("count"),
         )
-        .outerjoin(
-            ExtractedData, Invoice.id == ExtractedData.invoice_id
-        )
+        .outerjoin(ExtractedData, Invoice.id == ExtractedData.invoice_id)
         .where(Invoice.created_at >= twelve_months_ago)
         .group_by(func.date_trunc("month", Invoice.created_at))
         .order_by(func.date_trunc("month", Invoice.created_at))
@@ -325,9 +316,7 @@ async def get_dashboard_stats(
     try:
         anomaly_q = select(
             func.count().label("total"),
-            func.sum(
-                func.cast(Invoice.needs_review, Integer)
-            ).label("flagged"),
+            func.sum(func.cast(Invoice.needs_review, Integer)).label("flagged"),
         )
         anomaly_result = await db.execute(anomaly_q)
         anomaly_row = anomaly_result.one()
@@ -406,9 +395,7 @@ async def review_invoice(
     db: AsyncSession = Depends(get_session),
 ) -> ReviewResponse:
     """Human review: correct extracted fields and confirm."""
-    result = await db.execute(
-        select(Invoice).where(Invoice.id == invoice_id)
-    )
+    result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -456,12 +443,14 @@ async def review_invoice(
     invoice.confidence_score = 1.0
 
     # Log review action
-    db.add(ProcessingLog(
-        invoice_id=invoice_id,
-        step="review",
-        status="success",
-        message=f"Human review: {corrections_applied} corrections applied",
-    ))
+    db.add(
+        ProcessingLog(
+            invoice_id=invoice_id,
+            step="review",
+            status="success",
+            message=f"Human review: {corrections_applied} corrections applied",
+        )
+    )
 
     return ReviewResponse(
         invoice_id=invoice_id,
@@ -476,9 +465,7 @@ async def reprocess_invoice(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Re-run the extraction pipeline on an invoice."""
-    result = await db.execute(
-        select(Invoice).where(Invoice.id == invoice_id)
-    )
+    result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -490,12 +477,14 @@ async def reprocess_invoice(
     invoice.error_message = None
 
     # Log
-    db.add(ProcessingLog(
-        invoice_id=invoice_id,
-        step="reprocess",
-        status="started",
-        message="Reprocessing requested",
-    ))
+    db.add(
+        ProcessingLog(
+            invoice_id=invoice_id,
+            step="reprocess",
+            status="started",
+            message="Reprocessing requested",
+        )
+    )
 
     # Queue async processing
     process_invoice_task.delay(str(invoice_id))
@@ -509,15 +498,14 @@ async def delete_invoice(
     db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Delete an invoice and its associated data."""
-    result = await db.execute(
-        select(Invoice).where(Invoice.id == invoice_id)
-    )
+    result = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     # Delete file from storage
     from app.core.storage import storage
+
     try:
         storage.delete(invoice.file_path)
     except Exception:
