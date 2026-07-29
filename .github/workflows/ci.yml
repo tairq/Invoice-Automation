@@ -52,6 +52,7 @@ jobs:
           POSTGRES_USER: invoice_user
           POSTGRES_PASSWORD: invoice_pass
           POSTGRES_DB: invoice_processor
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-

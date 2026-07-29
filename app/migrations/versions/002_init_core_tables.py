@@ -28,10 +28,16 @@ def upgrade() -> None:
     # ---------------------------------------------------------------
     # 1. Create PostgreSQL enum types
     # ---------------------------------------------------------------
-    op.execute("CREATE TYPE invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review')")
+    op.execute(
+        "CREATE TYPE invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review')"  # noqa: E501
+    )
     op.execute("CREATE TYPE invoice_source AS ENUM ('upload', 'email', 'folder', 'api')")
-    op.execute("CREATE TYPE approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved')")
-    op.execute("CREATE TYPE po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy')")
+    op.execute(
+        "CREATE TYPE approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved')"  # noqa: E501
+    )
+    op.execute(
+        "CREATE TYPE po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy')"
+    )
     op.execute("CREATE TYPE payment_status AS ENUM ('unpaid', 'paid', 'overdue')")
     op.execute("CREATE TYPE po_status AS ENUM ('open', 'fulfilled', 'cancelled')")
 
@@ -45,8 +51,12 @@ def upgrade() -> None:
         sa.Column("email_config", sa.JSON(), nullable=True),
         sa.Column("webhook_url", sa.Text(), nullable=True),
         sa.Column("settings", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -61,8 +71,12 @@ def upgrade() -> None:
         sa.Column("tax_id", sa.String(100), nullable=True),
         sa.Column("payment_terms", sa.String(255), nullable=True),
         sa.Column("is_approved", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("canonical_name"),
     )
@@ -85,8 +99,12 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("'open'"),
         ),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("po_number"),
     )
@@ -98,10 +116,24 @@ def upgrade() -> None:
     op.create_table(
         "invoices",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("organization_id", sa.Uuid(), sa.ForeignKey("organizations.id"), nullable=True, index=True),
+        sa.Column(
+            "organization_id",
+            sa.Uuid(),
+            sa.ForeignKey("organizations.id"),
+            nullable=True,
+            index=True,
+        ),
         sa.Column(
             "status",
-            sa.Enum("pending", "processing", "done", "failed", "needs_review", name="invoice_status", create_type=False),
+            sa.Enum(
+                "pending",
+                "processing",
+                "done",
+                "failed",
+                "needs_review",
+                name="invoice_status",
+                create_type=False,
+            ),
             nullable=False,
             server_default=sa.text("'pending'"),
             index=True,
@@ -117,20 +149,46 @@ def upgrade() -> None:
         sa.Column("file_type", sa.String(10), nullable=False),
         sa.Column("file_size", sa.Integer(), nullable=False),
         sa.Column("confidence_score", sa.Float(), nullable=True),
-        sa.Column("needs_review", sa.Boolean(), nullable=False, server_default=sa.text("false"), index=True),
+        sa.Column(
+            "needs_review",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+            index=True,
+        ),
         sa.Column("is_duplicate", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column(
             "approval_status",
-            sa.Enum("pending_approval", "approved", "rejected", "auto_approved", name="approval_status", create_type=False),
+            sa.Enum(
+                "pending_approval",
+                "approved",
+                "rejected",
+                "auto_approved",
+                name="approval_status",
+                create_type=False,
+            ),
             nullable=False,
             server_default=sa.text("'pending_approval'"),
             index=True,
         ),
-        sa.Column("matched_po_id", sa.Uuid(), sa.ForeignKey("purchase_orders.id"), nullable=True, index=True),
+        sa.Column(
+            "matched_po_id",
+            sa.Uuid(),
+            sa.ForeignKey("purchase_orders.id"),
+            nullable=True,
+            index=True,
+        ),
         sa.Column(
             "po_match_status",
-            sa.Enum("matched", "partial", "unmatched", "discrepancy", name="po_match_status", create_type=False),
+            sa.Enum(
+                "matched",
+                "partial",
+                "unmatched",
+                "discrepancy",
+                name="po_match_status",
+                create_type=False,
+            ),
             nullable=True,
         ),
         sa.Column("vendor_id", sa.Uuid(), sa.ForeignKey("vendors.id"), nullable=True, index=True),
@@ -144,8 +202,16 @@ def upgrade() -> None:
             index=True,
         ),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False, index=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=False,
+            index=True,
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -155,7 +221,9 @@ def upgrade() -> None:
     op.create_table(
         "extracted_data",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("invoice_id", sa.Uuid(), sa.ForeignKey("invoices.id"), nullable=False, unique=True),
+        sa.Column(
+            "invoice_id", sa.Uuid(), sa.ForeignKey("invoices.id"), nullable=False, unique=True
+        ),
         sa.Column("invoice_number", sa.String(255), nullable=True, index=True),
         sa.Column("invoice_type", sa.String(50), nullable=True),
         sa.Column("issue_date", sa.Date(), nullable=True),
@@ -188,7 +256,9 @@ def upgrade() -> None:
         sa.Column("amount_due", sa.Numeric(12, 2), nullable=True),
         sa.Column("amount_paid", sa.Numeric(12, 2), nullable=True),
         sa.Column("raw_extraction_json", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_extracted_data_invoice_id"), "extracted_data", ["invoice_id"])
@@ -215,7 +285,9 @@ def upgrade() -> None:
         sa.Column("net_amount", sa.Numeric(12, 2), nullable=True),
         sa.Column("gross_amount", sa.Numeric(12, 2), nullable=True),
         sa.Column("item_code", sa.String(100), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_line_items_invoice_id"), "line_items", ["invoice_id"])
@@ -234,10 +306,14 @@ def upgrade() -> None:
         sa.Column("reviewed", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("corrected_value", sa.Text(), nullable=True),
         sa.Column("reviewer_notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_extraction_confidence_invoice_id"), "extraction_confidence", ["invoice_id"])
+    op.create_index(
+        op.f("ix_extraction_confidence_invoice_id"), "extraction_confidence", ["invoice_id"]
+    )
 
     # ---------------------------------------------------------------
     # 9. processing_logs
@@ -250,7 +326,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(20), nullable=False),
         sa.Column("message", sa.Text(), nullable=True),
         sa.Column("duration_ms", sa.Integer(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_processing_logs_invoice_id"), "processing_logs", ["invoice_id"])
@@ -267,7 +345,9 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("action", sa.String(20), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("token"),
     )
@@ -284,7 +364,9 @@ def upgrade() -> None:
         sa.Column("po_id", sa.Uuid(), sa.ForeignKey("purchase_orders.id"), nullable=False),
         sa.Column("match_confidence", sa.Float(), nullable=False, server_default=sa.text("0.0")),
         sa.Column("discrepancies", sa.Text(), nullable=True),
-        sa.Column("matched_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "matched_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_po_matches_invoice_id"), "po_matches", ["invoice_id"])
@@ -296,21 +378,38 @@ def upgrade() -> None:
     op.create_table(
         "webhook_deliveries",
         sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("organization_id", sa.Uuid(), sa.ForeignKey("organizations.id"), nullable=True, index=True),
+        sa.Column(
+            "organization_id",
+            sa.Uuid(),
+            sa.ForeignKey("organizations.id"),
+            nullable=True,
+            index=True,
+        ),
         sa.Column("invoice_id", sa.Uuid(), sa.ForeignKey("invoices.id"), nullable=False),
         sa.Column("webhook_url", sa.String(1024), nullable=False),
-        sa.Column("event_type", sa.String(100), nullable=False, server_default=sa.text("'invoice.processed'")),
+        sa.Column(
+            "event_type",
+            sa.String(100),
+            nullable=False,
+            server_default=sa.text("'invoice.processed'"),
+        ),
         sa.Column("attempt_number", sa.Integer(), nullable=False, server_default=sa.text("1")),
-        sa.Column("status", sa.String(20), nullable=False, server_default=sa.text("'pending'"), index=True),
+        sa.Column(
+            "status", sa.String(20), nullable=False, server_default=sa.text("'pending'"), index=True
+        ),
         sa.Column("response_code", sa.Integer(), nullable=True),
         sa.Column("response_body", sa.Text(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("attempted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_webhook_deliveries_organization_id"), "webhook_deliveries", ["organization_id"])
+    op.create_index(
+        op.f("ix_webhook_deliveries_organization_id"), "webhook_deliveries", ["organization_id"]
+    )
     op.create_index(op.f("ix_webhook_deliveries_invoice_id"), "webhook_deliveries", ["invoice_id"])
     op.create_index(op.f("ix_webhook_deliveries_status"), "webhook_deliveries", ["status"])
 
