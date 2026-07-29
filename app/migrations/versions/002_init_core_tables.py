@@ -30,9 +30,15 @@ def upgrade() -> None:
     #    (columns below use create_type=False to avoid duplicate-type
     #     errors when init_db() calls Base.metadata.create_all() at runtime)
     # ---------------------------------------------------------------
-    op.execute("CREATE TYPE IF NOT EXISTS invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review')")
-    op.execute("CREATE TYPE IF NOT EXISTS approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved')")
-    op.execute("CREATE TYPE IF NOT EXISTS po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy')")
+    op.execute(
+        "CREATE TYPE IF NOT EXISTS invoice_status AS ENUM ('pending', 'processing', 'done', 'failed', 'needs_review')"  # noqa: E501
+    )
+    op.execute(
+        "CREATE TYPE IF NOT EXISTS approval_status AS ENUM ('pending_approval', 'approved', 'rejected', 'auto_approved')"  # noqa: E501
+    )
+    op.execute(
+        "CREATE TYPE IF NOT EXISTS po_match_status AS ENUM ('matched', 'partial', 'unmatched', 'discrepancy')"  # noqa: E501
+    )
 
     # ---------------------------------------------------------------
     # 1. organizations
